@@ -69,7 +69,8 @@ app.get('/integrations/:id/edit',admin,async(req,res)=>{
  <label>Novo segredo webhook (opcional)</label><input type="password" name="webhook_secret" autocomplete="new-password" placeholder="Vazio = manter atual">
  <label>Ao resolver, ação na sessão Typebot</label><select name="bot_resolve_status">
  <option value="opened" ${i.bot_resolve_status==='opened'?'selected':''}>opened — retomar sessão</option>
- <option value="closed" ${i.bot_resolve_status==='closed'?'selected':''}>closed — encerrar sessão</option></select>
+ <option value="closed" ${i.bot_resolve_status==='closed'?'selected':''}>closed — encerrar sessão</option>
+  <option value="manual" ${i.bot_resolve_status==='manual'?'selected':''}>manual — não modificar sessão Typebot</option></select>
  <label><input type="checkbox" name="clear_assignment_on_resolve" value="1" style="width:auto" ${i.clear_assignment_on_resolve?'checked':''}> Remover agente e time após Resolver</label>
  <label><input type="checkbox" name="enabled" value="1" style="width:auto" ${i.enabled?'checked':''}> Integração ativa</label>
  <p>Webhook atual: <code>${esc(url+'/webhook/'+i.webhook_path)}</code></p>
@@ -83,7 +84,7 @@ app.post('/integrations/:id/edit',admin,csrf,async(req,res)=>{
   if(!/^[\w.-]{1,120}$/.test(instance)||!label||label.length>120)throw Error('Nome ou instância inválida');
   if(![companyId,accountId,inboxId].every(v=>Number.isSafeInteger(v)&&v>0))throw Error('IDs inválidos');
   const secret=String(b.webhook_secret||'');if(secret&&secret.length<8)throw Error('Novo segredo muito curto');
-  if(!['opened','closed'].includes(b.bot_resolve_status))throw Error('Ação Typebot inválida');
+  if(!['opened','closed','manual'].includes(b.bot_resolve_status))throw Error('Ação Typebot inválida');
   const r=await pool.query(`UPDATE integrations SET company_id=$1,label=$2,instance=$3,account_id=$4,inbox_id=$5,
     webhook_secret=COALESCE(NULLIF($6,''),webhook_secret),enabled=$7,clear_assignment_on_resolve=$8,
     bot_resolve_status=$9 WHERE id=$10 RETURNING id`,[
@@ -110,16 +111,21 @@ async function chatwoot(path,options={}){
   return txt?JSON.parse(txt):{};
  }finally{clearTimeout(t)}
 }
+async function getResolvedConversation(event){
+  const path=`/api/v1/accounts/${Number(event.account_id)}/conversations/${String(event.conversation_id)}`;
+  const data=await chatwoot(path);const conv=data.payload||data;
+  if(String(conv.status)!=='resolved')return null;
+  if(Number(conv.inbox_id??conv.inbox?.id)!==Number(event.inbox_id))throw Error('Inbox não confere');
+  return conv;
+}
 async function clearResolvedAssignment(event){
  // Keep the same conversation and its history. Never change the status.
  const account=Number(event.account_id),inbox=Number(event.inbox_id);
  const convId=String(event.conversation_id);
  if(!/^\d+$/.test(convId))throw Error('ID de conversa inválido');
  const path=`/api/v1/accounts/${account}/conversations/${convId}`;
- const data=await chatwoot(path);
- const conv=data.payload||data;
- if(String(conv.status)!=='resolved')throw Error('Conversa já não está resolvida; nenhuma atribuição removida');
- if(Number(conv.inbox_id??conv.inbox?.id)!==inbox)throw Error('Inbox da conversa não confere; nenhuma atribuição removida');
+ const conv=await getResolvedConversation(event);
+ if(!conv)throw Error('Conversa não está resolvida');
  const assignPath=path+'/assignments';
  // Chatwoot legacy API: separate requests; sending both can ignore team_id.
  await chatwoot(assignPath,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({assignee_id:null})});
@@ -130,40 +136,89 @@ async function clearResolvedAssignment(event){
   throw Error('Não foi possível confirmar remoção de agente e time');
  }
 }
+// State machine conservadora: nunca reiniciar uma sessão humana por evento antigo.
+const EVENT_MAX_AGE_MS=120000;
 let working=false;
 async function work(){
  if(working)return;working=true;
  try{
-  const rows=await pool.query(`SELECT e.id,e.payload,e.conversation_id,i.instance,i.account_id,i.inbox_id,
-    i.bot_resolve_status,i.clear_assignment_on_resolve
+  const rows=await pool.query(`SELECT e.id,e.payload,e.conversation_id,e.created_at,e.attempts,
+    i.instance,i.account_id,i.inbox_id,i.bot_resolve_status,i.clear_assignment_on_resolve
     FROM events e JOIN integrations i ON i.id=e.integration_id
     WHERE e.status='pending' AND i.enabled=true ORDER BY e.id LIMIT 10`);
   for(const event of rows.rows){
    const locked=await pool.query("UPDATE events SET status='processing',attempts=attempts+1 WHERE id=$1 AND status='pending' RETURNING id,attempts",[event.id]);
    if(!locked.rowCount)continue;
-   let status='failed',reason='',remoteJid=null;
+   let result='failed',reason='',remoteJid=null;
+   // Nunca fazer retry após uma mutação remota de sessão; evita fechar a sessão seguinte.
+   let sessionChangeAttempted=false;
    try{
-    const instance=encodeURIComponent(event.instance);
-    const config=await evolution(`/typebot/find/${instance}`);
-    const bots=Array.isArray(config)?config:[config];
-    const enabled=bots.filter(x=>x?.enabled&&typeof x.id==='string');
-    if(enabled.length!==1)throw Error('É necessário exatamente um Typebot ativo por instância');
-    const raw=await evolution(`/typebot/fetchSessions/${encodeURIComponent(enabled[0].id)}/${instance}`);
-    const matched=matchPausedSession(event.payload,raw);
-    reason=matched.reason;
-    if(!matched.remoteJid){status='skipped'}
-    else{
-     remoteJid=matched.remoteJid;
-     await evolution(`/typebot/changeStatus/${instance}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({remoteJid,status:event.bot_resolve_status})});
-     if(event.clear_assignment_on_resolve){
-      await clearResolvedAssignment(event);
-      reason=`${event.bot_resolve_status}_${matched.reason}_assignment_cleared`;
-     }else reason=`${event.bot_resolve_status}_${matched.reason}`;
-     status='completed';
+    const eventTime=new Date(event.created_at).getTime();
+    if(!Number.isFinite(eventTime)||Date.now()-eventTime>EVENT_MAX_AGE_MS){
+     result='skipped';reason='evento_antigo_mais_de_120s';
+    }else{
+     const conv=await getResolvedConversation(event);
+     if(!conv){result='skipped';reason='conversa_nao_esta_resolvida';}
+     else{
+      // Limpar agente/time PRIMEIRO. Se falhar, manter o Typebot pausado.
+      // Nunca é permitido que erro de limpeza volte a executar changeStatus.
+      if(event.clear_assignment_on_resolve){
+       await clearResolvedAssignment(event);
+      }
+      if(event.bot_resolve_status==='manual'){
+       result='completed';reason='somente_limpeza_sem_alterar_typebot';
+      }else{
+       const instance=encodeURIComponent(event.instance);
+       const config=await evolution(`/typebot/find/${instance}`);
+       const bots=Array.isArray(config)?config:[config];
+       const enabled=bots.filter(x=>x?.enabled&&typeof x.id==='string');
+       if(enabled.length!==1)throw Error('É necessário exatamente um Typebot ativo por instância');
+       const raw=await evolution(`/typebot/fetchSessions/${encodeURIComponent(enabled[0].id)}/${instance}`);
+       const matched=matchPausedSession(event.payload,raw);
+       reason=matched.reason;
+       if(!matched.remoteJid){result='skipped';}
+       else{
+        remoteJid=matched.remoteJid;
+        // Sessão iniciada depois do evento resolved é um novo ciclo; nunca modificar.
+        const sessions=[];
+        const seen=new Set();
+        const walk=(obj,depth=0)=>{
+         if(!obj||typeof obj!=='object'||depth>9||seen.has(obj))return;
+         seen.add(obj);
+         if(Array.isArray(obj)){obj.forEach(x=>walk(x,depth+1));return;}
+         if(obj.remoteJid===remoteJid&&obj.status==='paused')sessions.push(obj);
+         Object.values(obj).forEach(x=>{if(x&&typeof x==='object')walk(x,depth+1)});
+        };walk(raw);
+        if(sessions.length!==1){result='skipped';reason='sessao_nao_unica';}
+        else if(!sessions[0].createdAt||!Number.isFinite(new Date(sessions[0].createdAt).getTime())){
+         result='skipped';reason='sessao_sem_data_validavel';
+        }else if(new Date(sessions[0].createdAt).getTime()>eventTime){
+         result='skipped';reason='sessao_mais_nova_que_evento';
+        }else{
+         // Checar novamente o status da conversa imediatamente antes da mudança.
+         const stillResolved=await getResolvedConversation(event);
+         if(!stillResolved){result='skipped';reason='conversa_reaberta_antes_do_changeStatus';}
+         else{
+          sessionChangeAttempted=true;
+          await evolution(`/typebot/changeStatus/${instance}`,{
+           method:'POST',headers:{'Content-Type':'application/json'},
+           body:JSON.stringify({remoteJid,status:event.bot_resolve_status})
+          });
+          result='completed';reason=`${event.bot_resolve_status}_${matched.reason}`;
+         }
+        }
+       }
+      }
+     }
     }
-   }catch(e){reason=String(e.message).slice(0,300);if(locked.rows[0].attempts<3)status='retry'}
+   }catch(e){
+    reason=String(e.message).slice(0,300);
+    // Se a requisição changeStatus pode ter chegado ao servidor, não repetir.
+    if(!sessionChangeAttempted&&locked.rows[0].attempts<3&&Date.now()-new Date(event.created_at).getTime()<EVENT_MAX_AGE_MS)result='retry';
+    else result='failed';
+   }
    await pool.query('UPDATE events SET status=$2,reason=$3,remote_jid=$4,processed_at=now() WHERE id=$1',[
-    event.id,status==='retry'?'pending':status,reason,remoteJid
+    event.id,result==='retry'?'pending':result,reason,remoteJid
    ]);
   }
  }catch(e){console.error('Worker:',e.message)}finally{working=false}
