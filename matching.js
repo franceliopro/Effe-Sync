@@ -9,7 +9,26 @@ export function collectSessions(data){
  } walk(data);return out;
 }
 export function identifiers(payload){
- const values=[payload?.meta?.sender?.identifier,payload?.meta?.sender?.phone_number,payload?.meta?.sender?.additional_attributes?.remoteJid,payload?.meta?.sender?.custom_attributes?.remoteJid,payload?.sender?.identifier,payload?.sender?.phone_number,payload?.sender?.additional_attributes?.remoteJid,payload?.sender?.custom_attributes?.remoteJid,payload?.contact?.phone_number,payload?.contact?.identifier,payload?.conversation?.meta?.sender?.phone_number,payload?.conversation?.meta?.sender?.identifier,payload?.additional_attributes?.remoteJid,payload?.custom_attributes?.remoteJid,payload?.meta?.sender?.additional_attributes?.wa_id];
+ const values=[
+ payload?.remoteJid,
+ payload?.jid,
+ payload?.phone,
+ payload?.meta?.sender?.identifier,
+ payload?.meta?.sender?.phone_number,
+ payload?.meta?.sender?.additional_attributes?.remoteJid,
+ payload?.meta?.sender?.custom_attributes?.remoteJid,
+ payload?.sender?.identifier,
+ payload?.sender?.phone_number,
+ payload?.sender?.additional_attributes?.remoteJid,
+ payload?.sender?.custom_attributes?.remoteJid,
+ payload?.contact?.phone_number,
+ payload?.contact?.identifier,
+ payload?.conversation?.meta?.sender?.phone_number,
+ payload?.conversation?.meta?.sender?.identifier,
+ payload?.additional_attributes?.remoteJid,
+ payload?.custom_attributes?.remoteJid,
+ payload?.meta?.sender?.additional_attributes?.wa_id
+];
  const jids=new Set(values.map(jid).filter(Boolean));
  const phones=new Set(values.filter(x=>typeof x==='string' && !jid(x)).map(digits).filter(x=>x.length>=10&&x.length<=15));
  return {jids,phones};
