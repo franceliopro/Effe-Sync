@@ -73,6 +73,35 @@ padding:28px;
 margin:18px 0;
 }
 
+.card-grid{
+display:grid;
+grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+gap:20px;
+margin:20px 0;
+}
+
+.card{
+background:white;
+border:1px solid #dfe6ef;
+border-radius:16px;
+padding:24px;
+box-shadow:0 8px 25px rgba(15,30,60,.05);
+}
+
+.card h3{
+margin:0;
+font-size:15px;
+color:#667085;
+font-weight:600;
+}
+
+.card strong{
+display:block;
+font-size:36px;
+margin-top:12px;
+color:#101828;
+}
+
 h1{
 font-size:28px;
 }
