@@ -243,6 +243,65 @@ async function resolveInstanceUuid(client, instanceName){
 // Exclui somente o registro exato, do bot, instância e contato do evento.
 // Não usa DELETE por telefone isolado. Um evento antigo jamais deve atingir sessão nova.
 async function deleteExactSession(event, botId){
+  async function deleteFinishSession(event, botId){
+
+ if(!evolutionDb)
+   throw Error('Configure EVOLUTION_DATABASE_URL no Coolify');
+
+ const remoteJid = event.payload?.remoteJid;
+
+ if(!remoteJid)
+   throw Error('EFFE_FINISH sem remoteJid');
+
+ const client = await evolutionDb.connect();
+
+ try{
+
+  await client.query('BEGIN');
+
+  const instanceUuid = await resolveInstanceUuid(client,event.instance);
+
+  const deleted = await client.query(`
+    DELETE FROM public."IntegrationSession"
+    WHERE "botId"=$1
+      AND "instanceId"=$2
+      AND "remoteJid"=$3
+      AND type='typebot'
+    RETURNING id,status,"remoteJid"
+  `,
+  [
+    botId,
+    instanceUuid,
+    remoteJid
+  ]);
+
+  await client.query('COMMIT');
+
+  if(deleted.rowCount!==1){
+    return {
+      deleted:false,
+      reason:'nenhuma_sessao_encontrada_para_finish'
+    };
+  }
+
+  return {
+    deleted:true,
+    remoteJid:deleted.rows[0].remoteJid
+  };
+
+
+ }catch(e){
+
+  await client.query('ROLLBACK');
+  throw e;
+
+ }finally{
+
+  client.release();
+
+ }
+
+}
  if(!evolutionDb)throw Error('Configure EVOLUTION_DATABASE_URL no Coolify');
  const {jids,phones}=identifiers(event.payload);
  const remoteJids=[...new Set([...jids,...[...phones].map(x=>x+'@s.whatsapp.net')])];
@@ -296,7 +355,7 @@ if(event.payload?.command === 'EFFE_FINISH'){
     throw Error('É necessário exatamente um Typebot ativo por instância');
   }
 
-  const deletion = await deleteExactSession(event, enabled[0].id);
+  const deletion = await deleteFinishSession(event, enabled[0].id);
 
   await pool.query(`
  UPDATE events
