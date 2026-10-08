@@ -1,0 +1,36 @@
+services:
+  effe_sync:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+
+    environment:
+      NODE_ENV: production
+      TZ: America/Cuiaba
+      PORT: "3000"
+
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      REDIS_PREFIX: "effesync:"
+
+      EVOLUTION_URL: http://api:8080
+      EVOLUTION_API_KEY: ${EVOLUTION_API_KEY}
+
+      CHATWOOT_URL: https://chatwoot.effe.site
+      CHATWOOT_API_TOKEN: ${CHATWOOT_API_TOKEN}
+
+      SESSION_SECRET: ${SESSION_SECRET}
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      PUBLIC_URL: ${PUBLIC_URL}
+
+    expose:
+      - "3000"
+
+    networks:
+      - coolify
+
+networks:
+  coolify:
+    external: true
