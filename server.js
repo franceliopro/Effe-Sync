@@ -299,18 +299,21 @@ if(event.payload?.command === 'EFFE_FINISH'){
   const deletion = await deleteExactSession(event, enabled[0].id);
 
   await pool.query(`
-    UPDATE events
-    SET status=$1,
-        reason=$2
-    WHERE id=$3
-  `,
-  [
-    deletion.deleted ? 'completed' : 'skipped',
-    deletion.deleted
-      ? 'session_deleted_from_finish_command'
-      : deletion.reason,
-    event.id
-  ]);
+ UPDATE events
+ SET status=$1,
+     reason=$2,
+     remote_jid=$3,
+     processed_at=now()
+ WHERE id=$4
+`,
+[
+ deletion.deleted ? 'completed' : 'skipped',
+ deletion.deleted
+   ? 'session_deleted_from_finish_command'
+   : deletion.reason,
+ deletion.remoteJid || null,
+ event.id
+]);
 
   continue;
 }
