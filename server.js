@@ -30,9 +30,9 @@ function csrf(req,res,next){
   catch{return res.status(403).send('Origem inválida')}
   next();
 }
-function page(title,inner){return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)} • EFFE Sync</title><style>body{margin:0;background:#f5f7fb;color:#1a2739;font:15px system-ui,sans-serif}main{max-width:1080px;margin:30px auto;padding:0 18px}nav{background:#13233e;color:white;padding:18px 24px}nav a{color:white;margin-right:22px}a{color:#245ec0}h1{font-size:28px}section{background:white;border:1px solid #dae2ec;border-radius:12px;padding:20px;margin:18px 0;overflow:auto}input,select{width:100%;max-width:480px;padding:10px;margin:6px 0 16px;box-sizing:border-box;border:1px solid #cbd5e1;border-radius:7px}label{display:block;font-weight:600}button{border:0;background:#215fca;color:white;padding:11px 18px;border-radius:8px;cursor:pointer}table{border-collapse:collapse;width:100%}td,th{text-align:left;border-bottom:1px solid #e6ebf0;padding:12px}small,.muted{color:#5f6f83}code{word-break:break-all}pre{white-space:pre-wrap}form.inline{display:inline}form.inline button{background:#9f3c3c} .pill{background:#e1f5e6;color:#15703d;padding:4px 9px;border-radius:12px} .warning{background:#fff4d8;padding:12px;border-radius:8px}</style></head><body><nav><strong>EFFE Sync</strong>　 <a href="/">Painel</a><a href="/companies">Empresas</a><a href="/integrations">Instâncias</a><a href="/events">Eventos</a><a href="/logout">Sair</a></nav><main>${inner}</main></body></html>`}
+function page(title,inner){return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)} • EFFE Sync</title><style>body{margin:0;background:#f5f7fb;color:#1a2739;font:15px system-ui,sans-serif}main{max-width:1080px;margin:30px auto;padding:0 18px}nav{background:#13233e;color:white;padding:18px 24px}nav a{color:white;margin-right:22px}a{color:#245ec0}h1{font-size:28px}section{background:white;border:1px solid #dae2ec;border-radius:12px;padding:20px;margin:18px 0;overflow:auto}input,select{width:100%;max-width:480px;padding:10px;margin:6px 0 16px;box-sizing:border-box;border:1px solid #cbd5e1;border-radius:7px}label{display:block;font-weight:600}button{border:0;background:#215fca;color:white;padding:11px 18px;border-radius:8px;cursor:pointer}table{border-collapse:collapse;width:100%}td,th{text-align:left;border-bottom:1px solid #e6ebf0;padding:12px}small,.muted{color:#5f6f83}code{word-break:break-all}pre{white-space:pre-wrap}form.inline{display:inline}form.inline button{background:#9f3c3c} .pill{background:#e1f5e6;color:#15703d;padding:4px 9px;border-radius:12px} .warning{background:#fff4d8;padding:12px;border-radius:8px}</style></head><body><nav><strong>EFFE Sync</strong>　 <a href="/">Painel</a><a href="/companies">Empresas</a><a href="/integrations">Instâncias</a><a href="/automations">Automações</a><a href="/events">Eventos</a><a href="/logout">Sair</a></nav><main>${inner}</main></body></html>`}
 const fail=(res,e)=>res.status(400).send(page('Erro',`<section><h2>Não foi possível concluir</h2><p>${esc(e.message||e)}</p><a href="/">Voltar</a></section>`));
-async function init(){await pool.query(`CREATE TABLE IF NOT EXISTS companies(id BIGSERIAL PRIMARY KEY,name TEXT NOT NULL UNIQUE,created_at TIMESTAMPTZ DEFAULT now());CREATE TABLE IF NOT EXISTS integrations(id BIGSERIAL PRIMARY KEY,company_id BIGINT NOT NULL REFERENCES companies(id),label TEXT NOT NULL,instance TEXT NOT NULL,account_id INTEGER NOT NULL CHECK(account_id>0),inbox_id INTEGER NOT NULL CHECK(inbox_id>0),webhook_path TEXT NOT NULL UNIQUE,webhook_secret TEXT NOT NULL,enabled BOOLEAN NOT NULL DEFAULT true,created_at TIMESTAMPTZ DEFAULT now(),UNIQUE(account_id,inbox_id));CREATE TABLE IF NOT EXISTS events(id BIGSERIAL PRIMARY KEY,integration_id BIGINT NOT NULL REFERENCES integrations(id),delivery_key TEXT NOT NULL,conversation_id TEXT,status TEXT NOT NULL DEFAULT 'pending',reason TEXT,payload JSONB,remote_jid TEXT,attempts INT NOT NULL DEFAULT 0,created_at TIMESTAMPTZ DEFAULT now(),processed_at TIMESTAMPTZ,UNIQUE(integration_id,delivery_key));CREATE INDEX IF NOT EXISTS events_pending_idx ON events(status,created_at);ALTER TABLE integrations ADD COLUMN IF NOT EXISTS clear_assignment_on_resolve BOOLEAN NOT NULL DEFAULT false;ALTER TABLE integrations ADD COLUMN IF NOT EXISTS bot_resolve_status TEXT NOT NULL DEFAULT 'opened';ALTER TABLE integrations ADD COLUMN IF NOT EXISTS evolution_instance_id TEXT;`)}
+async function init(){await pool.query(`CREATE TABLE IF NOT EXISTS companies(id BIGSERIAL PRIMARY KEY,name TEXT NOT NULL UNIQUE,created_at TIMESTAMPTZ DEFAULT now());CREATE TABLE IF NOT EXISTS integrations(id BIGSERIAL PRIMARY KEY,company_id BIGINT NOT NULL REFERENCES companies(id),label TEXT NOT NULL,instance TEXT NOT NULL,account_id INTEGER NOT NULL CHECK(account_id>0),inbox_id INTEGER NOT NULL CHECK(inbox_id>0),webhook_path TEXT NOT NULL UNIQUE,webhook_secret TEXT NOT NULL,enabled BOOLEAN NOT NULL DEFAULT true,created_at TIMESTAMPTZ DEFAULT now(),UNIQUE(account_id,inbox_id));CREATE TABLE IF NOT EXISTS events(id BIGSERIAL PRIMARY KEY,integration_id BIGINT NOT NULL REFERENCES integrations(id),delivery_key TEXT NOT NULL,conversation_id TEXT,status TEXT NOT NULL DEFAULT 'pending',reason TEXT,payload JSONB,remote_jid TEXT,attempts INT NOT NULL DEFAULT 0,created_at TIMESTAMPTZ DEFAULT now(),processed_at TIMESTAMPTZ,UNIQUE(integration_id,delivery_key));CREATE INDEX IF NOT EXISTS events_pending_idx ON events(status,created_at);ALTER TABLE integrations ADD COLUMN IF NOT EXISTS clear_assignment_on_resolve BOOLEAN NOT NULL DEFAULT false;ALTER TABLE integrations ADD COLUMN IF NOT EXISTS bot_resolve_status TEXT NOT NULL DEFAULT 'opened';ALTER TABLE integrations ADD COLUMN IF NOT EXISTS evolution_instance_id TEXT;CREATE TABLE IF NOT EXISTS automation_rules(id BIGSERIAL PRIMARY KEY,integration_id BIGINT NOT NULL REFERENCES integrations(id) ON DELETE CASCADE,event TEXT NOT NULL CHECK(event='conversation.resolved'),action TEXT NOT NULL CHECK(action IN ('chatwoot.clear_assignment','typebot.delete_session','typebot.open_session','typebot.close_session','audit.only')),enabled BOOLEAN NOT NULL DEFAULT true,created_at TIMESTAMPTZ NOT NULL DEFAULT now(),UNIQUE(integration_id,event,action));`)}
 app.get('/health',async(req,res)=>{try{await pool.query('SELECT 1');res.json({ok:true})}catch{res.status(503).json({ok:false})}});
 let attempts=new Map();
 app.get('/login',(req,res)=>res.send(page('Entrar','<section><h1>Acesso administrativo</h1><form method="POST" action="/login"><label>Email</label><input name="email" type="email" required><label>Senha</label><input name="password" type="password" required><button>Entrar</button></form></section>')));
@@ -51,8 +51,8 @@ app.post('/companies/:id/edit',admin,csrf,async(req,res)=>{
  catch(e){fail(res,e)}
 });
 app.post('/companies',admin,csrf,async(req,res)=>{try{if(!String(req.body.name||'').trim())throw Error('Nome obrigatório');await pool.query('INSERT INTO companies(name) VALUES($1)',[String(req.body.name).trim()]);res.redirect('/companies')}catch(e){fail(res,e)}});
-app.get('/integrations',admin,async(req,res)=>{const [c,i]=await Promise.all([pool.query('SELECT * FROM companies ORDER BY name'),pool.query('SELECT i.*,c.name company FROM integrations i JOIN companies c ON c.id=i.company_id ORDER BY i.id DESC')]);res.send(page('Instâncias',`<h1>Instâncias e roteamento</h1><section><p class="warning">Cada par Conta + Caixa de entrada só pode pertencer a uma instância. Use o segredo de assinatura do webhook real do Chatwoot. Ele não será exibido novamente neste painel.</p><form method="POST"><label>Empresa</label><select name="company_id" required>${c.rows.map(x=>`<option value="${x.id}">${esc(x.name)}</option>`)}</select><label>Nome interno</label><input name="label" required placeholder="Comercial - Empresa A"><label>Nome exato da instância Evolution</label><input name="instance" required><label>ID da conta no Chatwoot</label><input name="account_id" type="number" min="1" required><label>ID da caixa de entrada no Chatwoot</label><input name="inbox_id" type="number" min="1" required><label>Segredo da assinatura do webhook no Chatwoot</label><input name="webhook_secret" required minlength="8" placeholder="Copie o segredo real do webhook Chatwoot"><button>Adicionar instância</button></form></section><section><h2>Integrações</h2><table><tr><th>Empresa / Instância</th><th>Conta / Inbox</th><th>Webhook</th><th>Ação</th></tr>${i.rows.map(x=>`<tr><td>${esc(x.company)}<br><b>${esc(x.label)}</b><br><small>${esc(x.instance)}</small></td><td>${x.account_id} / ${x.inbox_id}</td><td><code>${esc(url+'/webhook/'+x.webhook_path)}</code><br><small>${x.enabled?'Ativa':'Desativada'}</small></td><td><a href="/integrations/${x.id}/edit">Editar</a>　<form method="POST" action="/integrations/${x.id}/toggle" class="inline"><button>${x.enabled?'Desativar':'Ativar'}</button></form></td></tr>`).join('')}</table></section>`))});
-app.post('/integrations',admin,csrf,async(req,res)=>{try{const b=req.body; if(!/^[\w.-]{1,120}$/.test(String(b.instance||'')))throw Error('Instância inválida');if(!Number.isSafeInteger(+b.account_id)||+b.account_id<1||!Number.isSafeInteger(+b.inbox_id)||+b.inbox_id<1)throw Error('Conta/inbox inválidas');if(String(b.webhook_secret||'').length<8)throw Error('Segredo inválido');await pool.query('INSERT INTO integrations(company_id,label,instance,account_id,inbox_id,webhook_path,webhook_secret) VALUES ($1,$2,$3,$4,$5,$6,$7)',[b.company_id,String(b.label).slice(0,120),b.instance,b.account_id,b.inbox_id,token(),b.webhook_secret]);res.redirect('/integrations')}catch(e){fail(res,e)}});
+app.get('/integrations',admin,async(req,res)=>{const [c,i]=await Promise.all([pool.query('SELECT * FROM companies ORDER BY name'),pool.query('SELECT i.*,c.name company FROM integrations i JOIN companies c ON c.id=i.company_id ORDER BY i.id DESC')]);res.send(page('Instâncias',`<h1>Instâncias e roteamento</h1><section><p class="warning">Cada par Conta + Caixa de entrada só pode pertencer a uma instância. Use o segredo de assinatura do webhook real do Chatwoot. Ele não será exibido novamente neste painel.</p><form method="POST"><label>Empresa</label><select name="company_id" required>${c.rows.map(x=>`<option value="${x.id}">${esc(x.name)}</option>`)}</select><label>Nome interno</label><input name="label" required placeholder="Comercial - Empresa A"><label>Nome exato da instância Evolution</label><input name="instance" required><label>ID da conta no Chatwoot</label><input name="account_id" type="number" min="1" required><label>ID da caixa de entrada no Chatwoot</label><input name="inbox_id" type="number" min="1" required><label>Segredo da assinatura do webhook no Chatwoot</label><input name="webhook_secret" required minlength="8" placeholder="Copie o segredo real do webhook Chatwoot"><button>Adicionar instância</button></form></section><section><h2>Integrações</h2><table><tr><th>Empresa / Instância</th><th>Conta / Inbox</th><th>Webhook</th><th>Ação</th></tr>${i.rows.map(x=>`<tr><td>${esc(x.company)}<br><b>${esc(x.label)}</b><br><small>${esc(x.instance)}</small></td><td>${x.account_id} / ${x.inbox_id}</td><td><code>${esc(url+'/webhook/'+x.webhook_path)}</code><br><small>${x.enabled?'Ativa':'Desativada'}</small></td><td><a href="/integrations/${x.id}/edit">Editar</a>　<a href="/automations/${x.id}">Automações</a>　<form method="POST" action="/integrations/${x.id}/toggle" class="inline"><button>${x.enabled?'Desativar':'Ativar'}</button></form></td></tr>`).join('')}</table></section>`))});
+app.post('/integrations',admin,csrf,async(req,res)=>{try{const b=req.body; if(!/^[\w.-]{1,120}$/.test(String(b.instance||'')))throw Error('Instância inválida');if(!Number.isSafeInteger(+b.account_id)||+b.account_id<1||!Number.isSafeInteger(+b.inbox_id)||+b.inbox_id<1)throw Error('Conta/inbox inválidas');if(String(b.webhook_secret||'').length<8)throw Error('Segredo inválido');const client=await pool.connect();try{await client.query('BEGIN');const inserted=await client.query('INSERT INTO integrations(company_id,label,instance,account_id,inbox_id,webhook_path,webhook_secret,bot_resolve_status,clear_assignment_on_resolve) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,true) RETURNING id',[b.company_id,String(b.label).slice(0,120),b.instance,b.account_id,b.inbox_id,token(),b.webhook_secret,'delete_session']);for(const action of ['chatwoot.clear_assignment','typebot.delete_session'])await client.query('INSERT INTO automation_rules(integration_id,event,action) VALUES($1,$2,$3)',[inserted.rows[0].id,'conversation.resolved',action]);await client.query('COMMIT')}catch(e){await client.query('ROLLBACK');throw e}finally{client.release()}res.redirect('/integrations')}catch(e){fail(res,e)}});
 app.get('/integrations/:id/edit',admin,async(req,res)=>{
  const [r,c]=await Promise.all([
   pool.query('SELECT * FROM integrations WHERE id=$1',[req.params.id]),
@@ -68,7 +68,7 @@ app.get('/integrations/:id/edit',admin,async(req,res)=>{
  <label>Instância Evolution</label><input name="instance" required value="${esc(i.instance)}">
  <label>ID da conta Chatwoot</label><input name="account_id" type="number" min="1" required value="${i.account_id}">
  <label>ID da inbox Chatwoot</label><input name="inbox_id" type="number" min="1" required value="${i.inbox_id}">
-  <label>UUID interno da instância na Evolution (necessário para excluir sessão)</label><input name="evolution_instance_id" maxlength="100" value="${esc(i.evolution_instance_id||'')}" placeholder="UUID da coluna instanceId">
+  <p class="warning">O identificador interno da Evolution será detectado automaticamente pelo nome exato da instância no momento do encerramento. Não é necessário preencher UUID.</p>
  <label>Novo segredo webhook (opcional)</label><input type="password" name="webhook_secret" autocomplete="new-password" placeholder="Vazio = manter atual">
  <label>Ao resolver, ação na sessão Typebot</label><select name="bot_resolve_status">
  <option value="opened" ${i.bot_resolve_status==='opened'?'selected':''}>opened — retomar sessão</option>
@@ -87,21 +87,66 @@ app.post('/integrations/:id/edit',admin,csrf,async(req,res)=>{
   const companyId=Number(b.company_id),accountId=Number(b.account_id),inboxId=Number(b.inbox_id);
   if(!/^[\w.-]{1,120}$/.test(instance)||!label||label.length>120)throw Error('Nome ou instância inválida');
   if(![companyId,accountId,inboxId].every(v=>Number.isSafeInteger(v)&&v>0))throw Error('IDs inválidos');
-  const internalId=String(b.evolution_instance_id||'').trim();
-  if(internalId&&!/^[0-9a-fA-F-]{36}$/.test(internalId))throw Error('UUID interno inválido');
-  if(b.bot_resolve_status==='delete_session'&&!internalId)throw Error('Informe o UUID interno da instância Evolution para excluir sessão');
   const secret=String(b.webhook_secret||'');if(secret&&secret.length<8)throw Error('Novo segredo muito curto');
   if(!['opened','closed','manual','delete_session'].includes(b.bot_resolve_status))throw Error('Ação Typebot inválida');
   const r=await pool.query(`UPDATE integrations SET company_id=$1,label=$2,instance=$3,account_id=$4,inbox_id=$5,
     webhook_secret=COALESCE(NULLIF($6,''),webhook_secret),enabled=$7,clear_assignment_on_resolve=$8,
-    bot_resolve_status=$9,evolution_instance_id=$11 WHERE id=$10 RETURNING id`,[
-    companyId,label,instance,accountId,inboxId,secret,b.enabled==='1',b.clear_assignment_on_resolve==='1',b.bot_resolve_status,req.params.id,internalId||null
+    bot_resolve_status=$9 WHERE id=$10 RETURNING id`,[
+    companyId,label,instance,accountId,inboxId,secret,b.enabled==='1',b.clear_assignment_on_resolve==='1',b.bot_resolve_status,req.params.id
   ]);
   if(!r.rowCount)throw Error('Integração não encontrada');
+  // A tela de edição continua funcional; sincroniza políticas explícitas existentes.
+  const existing=await pool.query('SELECT 1 FROM automation_rules WHERE integration_id=$1 LIMIT 1',[req.params.id]);
+  if(existing.rowCount){
+   const client=await pool.connect();try{await client.query('BEGIN');await client.query('DELETE FROM automation_rules WHERE integration_id=$1',[req.params.id]);
+    const actions=[...(b.clear_assignment_on_resolve==='1'?['chatwoot.clear_assignment']:[]),...({'delete_session':'typebot.delete_session','opened':'typebot.open_session','closed':'typebot.close_session'}[b.bot_resolve_status]?[{'delete_session':'typebot.delete_session','opened':'typebot.open_session','closed':'typebot.close_session'}[b.bot_resolve_status]]:['audit.only'])];
+    for(const a of actions)await client.query('INSERT INTO automation_rules(integration_id,event,action) VALUES($1,$2,$3)',[req.params.id,'conversation.resolved',a]);await client.query('COMMIT');
+   }catch(e){await client.query('ROLLBACK');throw e}finally{client.release()}
+  }
   res.redirect('/integrations');
  }catch(e){fail(res,e)}
 });
 app.post('/integrations/:id/toggle',admin,csrf,async(req,res)=>{await pool.query('UPDATE integrations SET enabled=NOT enabled WHERE id=$1',[req.params.id]);res.redirect('/integrations')});
+// Catálogo conservador: ações destrutivas só no evento de resolução confirmado.
+const RULE_CATALOG=[
+ ['chatwoot.clear_assignment','Remover agente e time (primeira ação)'],
+ ['typebot.delete_session','Excluir sessão exata Typebot (padrão)'],
+ ['typebot.open_session','Retomar sessão Typebot (legado)'],
+ ['typebot.close_session','Fechar sessão Typebot (legado)'],
+ ['audit.only','Registrar evento sem modificar atendimento']
+];
+app.get('/automations',admin,async(req,res)=>{
+ const r=await pool.query('SELECT i.id,i.label,i.instance,c.name AS company FROM integrations i JOIN companies c ON c.id=i.company_id ORDER BY c.name,i.label');
+ res.send(page('Automações',`<h1>Automações por instância</h1><section><p>Fluxo padrão: Chatwoot resolvido → remover atribuições → excluir somente a sessão pausada correspondente. Não há exclusão no handoff humano.</p><table><tr><th>Empresa / Instância</th><th>Configurar</th></tr>${r.rows.map(x=>`<tr><td>${esc(x.company)} / ${esc(x.label)}<br><small>${esc(x.instance)}</small></td><td><a href="/automations/${x.id}">Gerenciar ações</a></td></tr>`).join('')}</table></section>`))
+});
+app.get('/automations/:id',admin,async(req,res)=>{
+ const [r,rules]=await Promise.all([pool.query('SELECT i.*,c.name AS company FROM integrations i JOIN companies c ON c.id=i.company_id WHERE i.id=$1',[req.params.id]),pool.query('SELECT action FROM automation_rules WHERE integration_id=$1 AND event=$2 AND enabled=true',[req.params.id,'conversation.resolved'])]);
+ if(!r.rowCount)return res.status(404).send('Integração não encontrada');
+ const i=r.rows[0], configured=rules.rows.length>0;
+ const actions=new Set(rules.rows.map(x=>x.action));
+ const legacyStatus={'delete_session':'typebot.delete_session','opened':'typebot.open_session','closed':'typebot.close_session'}[i.bot_resolve_status]||'audit.only';
+ const selected=configured?[...actions]:[...(i.clear_assignment_on_resolve?['chatwoot.clear_assignment']:[]),legacyStatus];
+ res.send(page('Regras de automação',`<h1>Automações — ${esc(i.company)} / ${esc(i.label)}</h1><section><p class="warning">Regras deste atendimento aplicam-se apenas a <b>conversation.resolved</b>. Uma única ação de sessão Typebot é permitida. Alterações passam a valer para novos eventos; não reprocessam eventos finalizados.</p><form method="POST"><label>Gatilho</label><input value="Chatwoot: conversa resolvida (conversation.resolved)" disabled><label><input type="checkbox" style="width:auto" name="clear" value="1" ${selected.includes('chatwoot.clear_assignment')?'checked':''}> Remover agente e time após Resolver</label><label>Ação na sessão Typebot</label><select name="typebot_action"><option value="typebot.delete_session" ${selected.includes('typebot.delete_session')?'selected':''}>Excluir sessão exata (padrão)</option><option value="audit.only" ${selected.includes('audit.only')?'selected':''}>Nenhuma alteração — apenas registrar</option><option value="typebot.open_session" ${selected.includes('typebot.open_session')?'selected':''}>Retomar sessão (legado)</option><option value="typebot.close_session" ${selected.includes('typebot.close_session')?'selected':''}>Fechar sessão (legado)</option></select><button>Salvar automação</button></form></section><section><h2>Proteções</h2><p>Ao excluir, confirma-se a conversa resolvida, o bot, a instância detectada por nome, o WhatsApp e o ID específico da sessão pausada. Se qualquer comparação falhar, nenhuma sessão será excluída.</p><p><a href="/events">Ver histórico de eventos</a></p></section>`));
+});
+app.post('/automations/:id',admin,csrf,async(req,res)=>{
+ try{
+  const integration=await pool.query('SELECT id FROM integrations WHERE id=$1',[req.params.id]);if(!integration.rowCount)return res.status(404).send('Integração não encontrada');
+  const action=String(req.body.typebot_action||'');
+  if(!['typebot.delete_session','typebot.open_session','typebot.close_session','audit.only'].includes(action))throw Error('Ação não permitida');
+  const clear=req.body.clear==='1';
+  const client=await pool.connect();
+  try{
+   await client.query('BEGIN');
+   await client.query('DELETE FROM automation_rules WHERE integration_id=$1 AND event=$2',[req.params.id,'conversation.resolved']);
+   const actions=[...(clear?['chatwoot.clear_assignment']:[]),action];
+   for(const a of actions)await client.query('INSERT INTO automation_rules(integration_id,event,action) VALUES($1,$2,$3)',[req.params.id,'conversation.resolved',a]);
+   const legacy={'typebot.delete_session':'delete_session','typebot.open_session':'opened','typebot.close_session':'closed','audit.only':'manual'}[action];
+   await client.query('UPDATE integrations SET bot_resolve_status=$2,clear_assignment_on_resolve=$3 WHERE id=$1',[req.params.id,legacy,clear]);
+   await client.query('COMMIT');
+  }catch(e){await client.query('ROLLBACK');throw e}finally{client.release()}
+  res.redirect('/automations/'+req.params.id);
+ }catch(e){fail(res,e)}
+});
 app.get('/events',admin,async(req,res)=>{const r=await pool.query('SELECT e.*,i.label,c.name company FROM events e JOIN integrations i ON i.id=e.integration_id JOIN companies c ON c.id=i.company_id ORDER BY e.id DESC LIMIT 150');res.send(page('Eventos',`<h1>Últimos eventos</h1><section><table><tr><th>Data</th><th>Empresa / Instância</th><th>Conversa</th><th>Status</th><th>Motivo / JID</th></tr>${r.rows.map(x=>`<tr><td>${esc(x.created_at.toISOString())}</td><td>${esc(x.company)} / ${esc(x.label)}</td><td>${esc(x.conversation_id)}</td><td>${esc(x.status)}</td><td>${esc(x.reason)}<br><small>${esc(x.remote_jid)}</small></td></tr>`).join('')}</table></section>`))});
 function validSignature(req,secret){const timestamp=req.get('x-chatwoot-timestamp')||'';const signature=req.get('x-chatwoot-signature')||'';if(!/^\d+$/.test(timestamp)||Math.abs(Date.now()/1000-Number(timestamp))>300)return false;if(!/^sha256=[a-f\d]{64}$/i.test(signature))return false;const expected='sha256='+crypto.createHmac('sha256',secret).update(Buffer.concat([Buffer.from(timestamp+'.'),req.rawBody||Buffer.alloc(0)])).digest('hex');return crypto.timingSafeEqual(Buffer.from(expected),Buffer.from(signature));}
 app.post('/webhook/:path',async(req,res)=>{const r=await pool.query('SELECT * FROM integrations WHERE webhook_path=$1 AND enabled=true',[req.params.path]);const i=r.rows[0];if(!i)return res.status(404).json({error:'not found'});if(!validSignature(req,i.webhook_secret))return res.status(401).json({error:'invalid signature'});const p=req.body||{};if(p.event!=='conversation_status_changed'||p.status!=='resolved')return res.json({ignored:true});const {account,inbox}=accountInbox(p);if(account!==i.account_id||inbox!==i.inbox_id)return res.json({ignored:true,reason:'different inbox'});const conversationId=String(p.id??p.conversation?.id??'');if(!/^\d+$/.test(conversationId))return res.status(422).json({error:'missing conversation id'});const delivery=req.get('x-chatwoot-delivery');const key=delivery&&delivery.length<=150?delivery:crypto.createHash('sha256').update(req.rawBody).digest('hex');await pool.query('INSERT INTO events(integration_id,delivery_key,conversation_id,status,payload) VALUES($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING',[i.id,key,conversationId,'pending',JSON.stringify(p)]);res.status(202).json({accepted:true})});
@@ -143,21 +188,29 @@ async function clearResolvedAssignment(event){
   throw Error('Não foi possível confirmar remoção de agente e time');
  }
 }
+// Resolve o nome público da instância por correspondência exata no cadastro da Evolution.
+// Se o nome for ausente ou ambíguo, interrompe a operação sem excluir registros.
+async function resolveInstanceUuid(client, instanceName){
+ if(!/^[\w.-]{1,120}$/.test(instanceName||''))throw Error('Nome da instância inválido');
+ const found=await client.query('SELECT id FROM public."Instance" WHERE name=$1 LIMIT 2',[instanceName]);
+ if(found.rowCount!==1 || !found.rows[0].id)throw Error('Instância Evolution ausente ou ambígua: '+instanceName);
+ return String(found.rows[0].id);
+}
 // Exclui somente o registro exato, do bot, instância e contato do evento.
 // Não usa DELETE por telefone isolado. Um evento antigo jamais deve atingir sessão nova.
 async function deleteExactSession(event, session, botId){
  if(!evolutionDb)throw Error('Configure EVOLUTION_DATABASE_URL no Coolify');
- if(!event.evolution_instance_id)throw Error('UUID interno Evolution ausente');
  if(!session?.id||!session?.remoteJid||session.status!=='paused')throw Error('Sessão não está pausada ou falta ID');
  if(!/^[a-zA-Z0-9_-]{8,128}$/.test(session.id))throw Error('ID de sessão inválido');
  const client=await evolutionDb.connect();
  try{
   await client.query('BEGIN');
+  const instanceUuid=await resolveInstanceUuid(client,event.instance);
   // Lock impede exclusão concorrente do mesmo registro. Nada é deletado em caso de divergência.
   const result=await client.query(`SELECT id,"createdAt",status FROM public."IntegrationSession"
      WHERE id=$1 AND "botId"=$2 AND "instanceId"=$3 AND "remoteJid"=$4
        AND type='typebot' AND status='paused' FOR UPDATE`,
-    [session.id,botId,event.evolution_instance_id,session.remoteJid]);
+    [session.id,botId,instanceUuid,session.remoteJid]);
   if(result.rowCount!==1)throw Error('Registro exato não encontrado; exclusão bloqueada');
   const created=new Date(result.rows[0].createdAt).getTime();
   const eventTime=new Date(event.created_at).getTime();
@@ -167,7 +220,7 @@ async function deleteExactSession(event, session, botId){
   const deleted=await client.query(`DELETE FROM public."IntegrationSession"
     WHERE id=$1 AND "botId"=$2 AND "instanceId"=$3 AND "remoteJid"=$4
       AND type='typebot' AND status='paused' RETURNING id`,
-   [session.id,botId,event.evolution_instance_id,session.remoteJid]);
+   [session.id,botId,instanceUuid,session.remoteJid]);
   if(deleted.rowCount!==1)throw Error('Exclusão não confirmada');
   await client.query('COMMIT');
  }catch(e){await client.query('ROLLBACK');throw e}finally{client.release()}
@@ -178,13 +231,25 @@ let working=false;
 async function work(){
  if(working)return;working=true;
  try{
-  const rows=await pool.query(`SELECT e.id,e.payload,e.conversation_id,e.created_at,e.attempts,
-    i.instance,i.account_id,i.inbox_id,i.bot_resolve_status,i.clear_assignment_on_resolve,i.evolution_instance_id
+  const rows=await pool.query(`SELECT e.id,e.integration_id,e.payload,e.conversation_id,e.created_at,e.attempts,
+    i.instance,i.account_id,i.inbox_id,i.bot_resolve_status,i.clear_assignment_on_resolve
     FROM events e JOIN integrations i ON i.id=e.integration_id
     WHERE e.status='pending' AND i.enabled=true ORDER BY e.id LIMIT 10`);
   for(const event of rows.rows){
    const locked=await pool.query("UPDATE events SET status='processing',attempts=attempts+1 WHERE id=$1 AND status='pending' RETURNING id,attempts",[event.id]);
    if(!locked.rowCount)continue;
+   // Política por instância: regras explícitas prevalecem sobre campos legados.
+   const configured=await pool.query('SELECT action,enabled FROM automation_rules WHERE integration_id=$1 AND event=$2',[event.integration_id,'conversation.resolved']);
+   if(configured.rowCount){
+    const actions=new Set(configured.rows.filter(x=>x.enabled).map(x=>x.action));
+    event.clear_assignment_on_resolve=actions.has('chatwoot.clear_assignment');
+    const typebot=Array.from(actions).filter(x=>x.startsWith('typebot.'));
+    if(typebot.length>1){
+     await pool.query('UPDATE events SET status=$2,reason=$3,processed_at=now() WHERE id=$1',[event.id,'failed','Regras Typebot conflitantes']);
+     continue;
+    }
+    event.bot_resolve_status=typebot.length?{'typebot.delete_session':'delete_session','typebot.open_session':'opened','typebot.close_session':'closed'}[typebot[0]]:'manual';
+   }
    let result='failed',reason='',remoteJid=null;
    // Nunca fazer retry após uma mutação remota de sessão; evita fechar a sessão seguinte.
    let sessionChangeAttempted=false;
