@@ -242,8 +242,10 @@ async function resolveInstanceUuid(client, instanceName){
 }
 // Exclui somente o registro exato, do bot, instância e contato do evento.
 // Não usa DELETE por telefone isolado. Um evento antigo jamais deve atingir sessão nova.
-async function deleteExactSession(event, botId){
-  async function deleteFinishSession(event, botId){
+// Exclusão direta para comando interno EFFE_FINISH.
+// O Typebot confirmou o encerramento do fluxo.
+// Não usa regras de conversa resolvida nem janela de segurança.
+async function deleteFinishSession(event, botId){
 
  if(!evolutionDb)
    throw Error('Configure EVOLUTION_DATABASE_URL no Coolify');
@@ -286,7 +288,8 @@ async function deleteExactSession(event, botId){
 
   return {
     deleted:true,
-    remoteJid:deleted.rows[0].remoteJid
+    remoteJid:deleted.rows[0].remoteJid,
+    previousStatus:deleted.rows[0].status
   };
 
 
@@ -302,6 +305,10 @@ async function deleteExactSession(event, botId){
  }
 
 }
+
+
+// Exclusão segura para eventos Chatwoot resolvidos.
+async function deleteExactSession(event, botId){
  if(!evolutionDb)throw Error('Configure EVOLUTION_DATABASE_URL no Coolify');
  const {jids,phones}=identifiers(event.payload);
  const remoteJids=[...new Set([...jids,...[...phones].map(x=>x+'@s.whatsapp.net')])];
