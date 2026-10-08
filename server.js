@@ -69,7 +69,7 @@ section{
 background:white;
 border:1px solid #dfe6ef;
 border-radius:16px;
-padding:22px;
+padding:28px;
 margin:18px 0;
 }
 
@@ -88,9 +88,19 @@ border-radius:8px;
 input,select{
 width:100%;
 max-width:480px;
-padding:10px;
-border-radius:8px;
+padding:12px;
+margin-top:6px;
+margin-bottom:18px;
+border-radius:10px;
 border:1px solid #ccd5e1;
+background:#fff;
+}
+
+label{
+display:block;
+font-weight:600;
+margin-bottom:6px;
+color:#24324a;
 }
 
 table{
