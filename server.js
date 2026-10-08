@@ -92,9 +92,14 @@ font-size:15px;
 .menu-toggle{
 display:none;
 margin-left:auto;
-background:transparent;
+background:rgba(255,255,255,.08);
+color:white;
 font-size:24px;
-padding:0;
+width:42px;
+height:42px;
+border-radius:10px;
+align-items:center;
+justify-content:center;
 }
 
 
@@ -105,7 +110,7 @@ position:relative;
 }
 
 .menu-toggle{
-display:block;
+display:flex;
 }
 
 
@@ -374,24 +379,28 @@ Central inteligente de automações WhatsApp
 <div class="card">
 <h3>🏢 Empresas</h3>
 <strong>${companies.rows[0].n}</strong>
+<small>Clientes cadastrados</small>
 </div>
 
 
 <div class="card">
 <h3>🔌 Instâncias ativas</h3>
 <strong>${integrations.rows[0].n}</strong>
+<small>Conexões ativas</small>
 </div>
 
 
 <div class="card">
 <h3>✅ Finalizados</h3>
 <strong>${stats.completed||0}</strong>
+<small>Fluxos concluídos</small>
 </div>
 
 
 <div class="card">
 <h3>⚠️ Falhas</h3>
 <strong>${stats.failed||0}</strong>
+<small>Eventos que precisam atenção</small>
 </div>
 
 
@@ -418,7 +427,13 @@ ${recent.rows.map(x=>`
 <tr>
 
 <td>
-${esc(x.status)}
+${
+x.status==='completed'
+?'🟢 Concluído'
+:x.status==='failed'
+?'🔴 Falhou'
+:'🟡 Pendente'
+}
 </td>
 
 <td>
@@ -426,7 +441,11 @@ ${esc(x.label)}
 </td>
 
 <td>
-${esc(x.reason||'-')}
+${
+x.reason?.includes('finish_command')
+?'Fluxo Typebot finalizado automaticamente'
+:esc(x.reason||'-')
+}
 </td>
 
 <td>
