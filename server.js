@@ -284,6 +284,36 @@ async function work(){
     FROM events e JOIN integrations i ON i.id=e.integration_id
     WHERE e.status='pending' AND i.enabled=true ORDER BY e.id LIMIT 10`);
   for(const event of rows.rows){
+    // Comando interno Typebot - não passa pelo Chatwoot
+if(event.payload?.command === 'EFFE_FINISH'){
+
+  const config = await evolution(`/typebot/find/${encodeURIComponent(event.instance)}`);
+  const bots = Array.isArray(config) ? config : [config];
+
+  const enabled = bots.filter(x => x?.enabled && typeof x.id === 'string');
+
+  if(enabled.length !== 1){
+    throw Error('É necessário exatamente um Typebot ativo por instância');
+  }
+
+  const deletion = await deleteExactSession(event, enabled[0].id);
+
+  await pool.query(`
+    UPDATE events
+    SET status=$1,
+        reason=$2
+    WHERE id=$3
+  `,
+  [
+    deletion.deleted ? 'completed' : 'skipped',
+    deletion.deleted
+      ? 'session_deleted_from_finish_command'
+      : deletion.reason,
+    event.id
+  ]);
+
+  continue;
+}
    const locked=await pool.query("UPDATE events SET status='processing',attempts=attempts+1 WHERE id=$1 AND status='pending' RETURNING id,attempts",[event.id]);
    if(!locked.rowCount)continue;
    // Política por instância: regras explícitas prevalecem sobre campos legados.
