@@ -20,52 +20,43 @@ const cookie=(res,name,value,maxAge)=>res.setHeader('Set-Cookie',`${name}=${valu
 function current(req){const raw=String(req.headers.cookie||'').split('; ').find(x=>x.startsWith('bc_session='))?.slice(11);if(!raw)return false;const [exp,sig]=raw.split('.');if(!/^\d+$/.test(exp)||Number(exp)<Date.now())return false;const h=sign(exp);return sig?.length===h.length&&crypto.timingSafeEqual(Buffer.from(sig),Buffer.from(h));}
 function admin(req,res,next){if(!current(req))return res.redirect('/login');next()}
 
+
 function csrf(req, res, next) {
   const origin = req.get('origin');
-  const fetchSite = req.get('sec-fetch-site');
+  const expected = new URL(process.env.PUBLIC_URL.trim()).origin;
 
-  let expectedOrigin;
+  let received = null;
 
   try {
-    expectedOrigin = new URL(
-      process.env.PUBLIC_URL.trim()
-    ).origin;
-  } catch {
-    console.error('PUBLIC_URL inválida');
-    return res.status(500).send(
-      'Erro de configuração do servidor'
-    );
-  }
-
-  let receivedOrigin = null;
-
-  if (origin) {
-    try {
-      receivedOrigin = new URL(origin).origin;
-    } catch {
-      return res.status(403).send(
-        'Origin not allowed'
-      );
+    if (origin) {
+      received = new URL(origin).origin;
     }
-  }
-
-  if (
-    (receivedOrigin && receivedOrigin !== expectedOrigin) ||
-    fetchSite === 'cross-site'
-  ) {
-    console.warn('CSRF bloqueado:', {
-      expectedOrigin,
-      receivedOrigin,
-      fetchSite
+  } catch {
+    console.error('[EFFE SYNC] Origin inválida', {
+      origin,
+      expected
     });
 
+    return res.status(403).send('Origem inválida');
+  }
+
+  console.log('[EFFE SYNC] Verificação de origem:', {
+    received,
+    expected,
+    fetchSite: req.get('sec-fetch-site')
+  });
+
+  if (!received || received !== expected) {
+    console.error('[EFFE SYNC] Origem bloqueada');
+
     return res.status(403).send(
-      'Origin not allowed'
+      'Origem não autorizada'
     );
   }
 
   next();
 }
+
 
 function page(title,inner){return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)} • Bot Control</title><style>body{margin:0;background:#f5f7fb;color:#1a2739;font:15px system-ui,sans-serif}main{max-width:1080px;margin:30px auto;padding:0 18px}nav{background:#13233e;color:white;padding:18px 24px}nav a{color:white;margin-right:22px}a{color:#245ec0}h1{font-size:28px}section{background:white;border:1px solid #dae2ec;border-radius:12px;padding:20px;margin:18px 0;overflow:auto}input,select{width:100%;max-width:480px;padding:10px;margin:6px 0 16px;box-sizing:border-box;border:1px solid #cbd5e1;border-radius:7px}label{display:block;font-weight:600}button{border:0;background:#215fca;color:white;padding:11px 18px;border-radius:8px;cursor:pointer}table{border-collapse:collapse;width:100%}td,th{text-align:left;border-bottom:1px solid #e6ebf0;padding:12px}small,.muted{color:#5f6f83}code{word-break:break-all}pre{white-space:pre-wrap}form.inline{display:inline}form.inline button{background:#9f3c3c} .pill{background:#e1f5e6;color:#15703d;padding:4px 9px;border-radius:12px} .warning{background:#fff4d8;padding:12px;border-radius:8px}</style></head><body><nav><strong>Bot Control Multiempresa</strong>　 <a href="/">Painel</a><a href="/companies">Empresas</a><a href="/integrations">Instâncias</a><a href="/events">Eventos</a><a href="/logout">Sair</a></nav><main>${inner}</main></body></html>`}
 const fail=(res,e)=>res.status(400).send(page('Erro',`<section><h2>Não foi possível concluir</h2><p>${esc(e.message||e)}</p><a href="/">Voltar</a></section>`));
