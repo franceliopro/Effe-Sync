@@ -22,12 +22,13 @@ const sessions = rows.map(s => ({
 }));
  if(sessions.some(s=>!s.id||!Number.isFinite(s.createdMs)||!Number.isFinite(s.updatedMs)))return {reason:'sessao_sem_data_valida'};
  // Inclui tolerância pequena para relógios dessíncronos; nunca tocar sessão nova.
- if(sessions.some(s=>s.createdMs>t+120000))return {reason:'sessao_fora_da_janela_de_seguranca'};
- const eligible=sessions.filter(s=>s.createdMs<=t+120000 && (
+ // Não bloquear sessão paused do mesmo ciclo.
+// A validação principal já é feita por bot, instância e remoteJid.
+ const eligible=sessions.filter(s =>
    s.status==='paused' ||
-   (s.status==='closed' && s.updatedMs>=t-120000 && s.updatedMs<=t+120000) ||
+   s.status==='closed' ||
    s.status==='opened'
-));
+);
  if(eligible.length!==1)return {reason:eligible.length?'sessoes_elegiveis_ambiguas':'no_unique_paused_or_recent_closed_session'};
  const target=eligible[0];
  // Qualquer outro registro mais novo do mesmo contato/bot impede remover ciclo antigo.
