@@ -169,7 +169,7 @@ async function work() {
               },
               body: JSON.stringify({
                 remoteJid,
-                status: 'closed'
+                status: 'opened'
               })
             }
           );
