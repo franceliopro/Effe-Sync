@@ -59,6 +59,30 @@ margin-right:20px;
 text-decoration:none;
 }
 
+.top-nav{
+display:flex;
+align-items:center;
+gap:20px;
+flex-wrap:wrap;
+}
+
+.top-nav strong{
+font-size:18px;
+}
+
+@media(max-width:700px){
+
+.top-nav{
+display:flex;
+justify-content:space-between;
+}
+
+.top-nav a{
+display:block;
+}
+
+}
+
 main{
 max-width:1100px;
 margin:30px auto;
@@ -172,6 +196,18 @@ padding:18px;
 grid-template-columns:1fr;
 }
 
+.card{
+ padding:18px;
+}
+
+.card strong{
+ font-size:28px;
+}
+
+section{
+ margin-bottom:15px;
+}
+
 table{
 font-size:14px;
 }
@@ -183,7 +219,7 @@ font-size:14px;
 
 <body>
 
-<nav>
+<nav class="top-nav">
 <strong>⚡ EFFE Sync</strong>
 &nbsp;
 <a href="/">Painel</a>
