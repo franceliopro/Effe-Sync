@@ -3,7 +3,7 @@ import helmet from 'helmet';
 import pg from 'pg';
 import bcrypt from 'bcryptjs';
 import crypto from 'node:crypto';
-import { matchPausedSession, accountInbox } from './matching.js';
+import { matchPausedSession, accountInbox } from './matching.js'; 
 
 const required=['DATABASE_URL','SESSION_SECRET','ADMIN_EMAIL','ADMIN_PASSWORD','EVOLUTION_URL','EVOLUTION_API_KEY','PUBLIC_URL'];
 for(const k of required)if(!process.env[k])throw Error(`Missing ${k}`);
