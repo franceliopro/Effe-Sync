@@ -174,9 +174,16 @@ font-weight:600;
 
 .card strong{
 display:block;
-font-size:36px;
-margin-top:12px;
+font-size:42px;
+margin-top:14px;
 color:#101828;
+}
+
+.card small{
+display:block;
+margin-top:10px;
+font-size:13px;
+color:#667085;
 }
 
 h1{
@@ -386,7 +393,7 @@ Central inteligente de automações WhatsApp
 <div class="card">
 <h3>🔌 Instâncias ativas</h3>
 <strong>${integrations.rows[0].n}</strong>
-<small>Conexões ativas</small>
+<small>Conexões operando</small>
 </div>
 
 
@@ -571,7 +578,17 @@ app.post('/automations/:id',admin,csrf,async(req,res)=>{
   res.redirect('/automations/'+req.params.id);
  }catch(e){fail(res,e)}
 });
-app.get('/events',admin,async(req,res)=>{const r=await pool.query('SELECT e.*,i.label,c.name company FROM events e JOIN integrations i ON i.id=e.integration_id JOIN companies c ON c.id=i.company_id ORDER BY e.id DESC LIMIT 150');res.send(page('Eventos',`<h1>Últimos eventos</h1><section><table><tr><th>Data</th><th>Empresa / Instância</th><th>Conversa</th><th>Status</th><th>Motivo / JID</th></tr>${r.rows.map(x=>`<tr><td>${esc(x.created_at.toISOString())}</td><td>${esc(x.company)} / ${esc(x.label)}</td><td>${esc(x.conversation_id)}</td><td>${esc(x.status)}</td><td>${esc(x.reason)}<br><small>${esc(x.remote_jid)}</small></td></tr>`).join('')}</table></section>`))});
+app.get('/events',admin,async(req,res)=>{const r=await pool.query('SELECT e.*,i.label,c.name company FROM events e JOIN integrations i ON i.id=e.integration_id JOIN companies c ON c.id=i.company_id ORDER BY e.id DESC LIMIT 150');res.send(page('Eventos',`<h1>Últimos eventos</h1><section><table><tr><th>Data</th><th>Empresa / Instância</th><th>Conversa</th><th>Status</th><th>Motivo / JID</th></tr>${r.rows.map(x=>`<tr><td>${esc(x.created_at.toISOString())}</td><td>${esc(x.company)} / ${esc(x.label)}</td><td>${esc(x.conversation_id)}</td><td>${
+x.status==='completed'
+?'🟢 Concluído'
+:x.status==='failed'
+?'🔴 Falhou'
+:'🟡 Pendente'
+}</td><td>${
+x.reason?.includes('finish_command')
+?'Fluxo Typebot finalizado automaticamente'
+:esc(x.reason||'-')
+}<br><small>${esc(x.remote_jid)}</small></td></tr>`).join('')}</table></section>`))});
 function validSignature(req,secret){const timestamp=req.get('x-chatwoot-timestamp')||'';const signature=req.get('x-chatwoot-signature')||'';if(!/^\d+$/.test(timestamp)||Math.abs(Date.now()/1000-Number(timestamp))>300)return false;if(!/^sha256=[a-f\d]{64}$/i.test(signature))return false;const expected='sha256='+crypto.createHmac('sha256',secret).update(Buffer.concat([Buffer.from(timestamp+'.'),req.rawBody||Buffer.alloc(0)])).digest('hex');return crypto.timingSafeEqual(Buffer.from(expected),Buffer.from(signature));}
 // Webhook interno do EFFE Sync para comandos do Typebot
 app.post('/webhook/effe/:path', async(req,res)=>{
