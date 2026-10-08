@@ -60,25 +60,73 @@ text-decoration:none;
 }
 
 .top-nav{
+background:#101c35;
+color:white;
+padding:18px 28px;
 display:flex;
 align-items:center;
-gap:20px;
-flex-wrap:wrap;
+gap:30px;
 }
 
-.top-nav strong{
-font-size:18px;
+.brand{
+font-size:20px;
+font-weight:800;
 }
+
+.brand span{
+color:#4da3ff;
+}
+
+.menu-links{
+display:flex;
+gap:20px;
+align-items:center;
+}
+
+.menu-links a{
+color:white;
+text-decoration:none;
+font-size:15px;
+}
+
+.menu-toggle{
+display:none;
+margin-left:auto;
+background:transparent;
+font-size:24px;
+padding:0;
+}
+
 
 @media(max-width:700px){
 
 .top-nav{
-display:flex;
-justify-content:space-between;
+position:relative;
 }
 
-.top-nav a{
+.menu-toggle{
 display:block;
+}
+
+
+.menu-links{
+display:none;
+position:absolute;
+top:65px;
+left:0;
+right:0;
+background:#101c35;
+padding:20px;
+flex-direction:column;
+align-items:flex-start;
+z-index:10;
+}
+
+
+.menu-open .menu-links{
+display:flex;
+}
+
 }
 
 }
@@ -220,14 +268,26 @@ font-size:14px;
 <body>
 
 <nav class="top-nav">
-<strong>⚡ EFFE Sync</strong>
-&nbsp;
-<a href="/">Painel</a>
-<a href="/companies">Empresas</a>
-<a href="/integrations">Instâncias</a>
-<a href="/automations">Automações</a>
-<a href="/events">Eventos</a>
-<a href="/logout">Sair</a>
+
+<div class="brand">
+⚡ EFFE <span>Sync</span>
+</div>
+
+<button class="menu-toggle" onclick="document.body.classList.toggle('menu-open')">
+☰
+</button>
+
+<div class="menu-links">
+
+<a href="/">🏠 Painel</a>
+<a href="/companies">🏢 Empresas</a>
+<a href="/integrations">🔌 Instâncias</a>
+<a href="/automations">🤖 Automações</a>
+<a href="/events">📊 Eventos</a>
+<a href="/logout">🚪 Sair</a>
+
+</div>
+
 </nav>
 
 <main>
