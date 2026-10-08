@@ -1,0 +1,11 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {chooseSessionForDeletion} from '../session-policy.js';
+const event='2026-10-08T10:02:27.659Z';
+const s=(status='closed',createdAt='2026-10-08T10:01:48.258Z',updatedAt='2026-10-08T10:02:21.634Z',id='s1')=>({id,status,createdAt,updatedAt});
+test('closed recente do ciclo é elegível',()=>assert.equal(chooseSessionForDeletion([s()],event).session?.id,'s1'));
+test('paused do ciclo é elegível',()=>assert.equal(chooseSessionForDeletion([s('paused')],event).session?.id,'s1'));
+test('closed antigo é ignorado',()=>assert.equal(chooseSessionForDeletion([s('closed','2026-10-08T09:00:00Z','2026-10-08T09:01:00Z')],event).session,undefined));
+test('nova sessão bloqueia exclusão antiga',()=>assert.equal(chooseSessionForDeletion([s(),s('opened','2026-10-08T10:03:00Z','2026-10-08T10:03:01Z','s2')],event).session,undefined));
+test('duas sessões elegíveis não são excluídas',()=>assert.equal(chooseSessionForDeletion([s(),s('paused','2026-10-08T10:01:49Z','2026-10-08T10:02:21Z','s2')],event).session,undefined));
+test('opened isolado não é excluído',()=>assert.equal(chooseSessionForDeletion([s('opened')],event).session,undefined));

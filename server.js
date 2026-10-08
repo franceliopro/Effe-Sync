@@ -3,7 +3,8 @@ import helmet from 'helmet';
 import pg from 'pg';
 import bcrypt from 'bcryptjs';
 import crypto from 'node:crypto';
-import { matchPausedSession, accountInbox } from './matching.js';
+import { matchPausedSession, accountInbox, identifiers } from './matching.js';
+import { chooseSessionForDeletion } from './session-policy.js';
 
 const required=['DATABASE_URL','SESSION_SECRET','ADMIN_EMAIL','ADMIN_PASSWORD','EVOLUTION_URL','EVOLUTION_API_KEY','PUBLIC_URL'];
 for(const k of required)if(!process.env[k])throw Error(`Missing ${k}`);
@@ -198,31 +199,35 @@ async function resolveInstanceUuid(client, instanceName){
 }
 // Exclui somente o registro exato, do bot, instância e contato do evento.
 // Não usa DELETE por telefone isolado. Um evento antigo jamais deve atingir sessão nova.
-async function deleteExactSession(event, session, botId){
+async function deleteExactSession(event, botId){
  if(!evolutionDb)throw Error('Configure EVOLUTION_DATABASE_URL no Coolify');
- if(!session?.id||!session?.remoteJid||session.status!=='paused')throw Error('Sessão não está pausada ou falta ID');
- if(!/^[a-zA-Z0-9_-]{8,128}$/.test(session.id))throw Error('ID de sessão inválido');
+ const {jids,phones}=identifiers(event.payload);
+ const remoteJids=[...new Set([...jids,...[...phones].map(x=>x+'@s.whatsapp.net')])];
+ if(!remoteJids.length)throw Error('Contato sem JID/telefone confiável no webhook');
  const client=await evolutionDb.connect();
  try{
   await client.query('BEGIN');
   const instanceUuid=await resolveInstanceUuid(client,event.instance);
-  // Lock impede exclusão concorrente do mesmo registro. Nada é deletado em caso de divergência.
-  const result=await client.query(`SELECT id,"createdAt",status FROM public."IntegrationSession"
-     WHERE id=$1 AND "botId"=$2 AND "instanceId"=$3 AND "remoteJid"=$4
-       AND type='typebot' AND status='paused' FOR UPDATE`,
-    [session.id,botId,instanceUuid,session.remoteJid]);
-  if(result.rowCount!==1)throw Error('Registro exato não encontrado; exclusão bloqueada');
-  const created=new Date(result.rows[0].createdAt).getTime();
-  const eventTime=new Date(event.created_at).getTime();
-  if(!Number.isFinite(created)||created>eventTime)throw Error('Sessão mais recente que evento; exclusão bloqueada');
-  // Uma nova leitura do Chatwoot antes do commit diminui a janela de corrida.
-  if(!await getResolvedConversation(event))throw Error('Conversa reaberta; exclusão bloqueada');
+  // Trava apenas sessões exatas do bot, da instância e do contato envolvidos.
+  const rows=await client.query(`SELECT id,"remoteJid",status,"createdAt","updatedAt"
+    FROM public."IntegrationSession"
+    WHERE "botId"=$1 AND "instanceId"=$2 AND "remoteJid"=ANY($3::varchar[])
+      AND type='typebot' AND status IN ('paused','closed','opened')
+    FOR UPDATE`,[botId,instanceUuid,remoteJids]);
+  const choice=chooseSessionForDeletion(rows.rows, new Date(event.created_at));
+  if(!choice.session){await client.query('ROLLBACK');return {deleted:false,reason:choice.reason};}
+  // Revalidar a conversa antes de qualquer DELETE.
+  if(!await getResolvedConversation(event)){
+   await client.query('ROLLBACK');return {deleted:false,reason:'conversa_reaberta_antes_da_exclusao'};
+  }
+  const target=choice.session;
   const deleted=await client.query(`DELETE FROM public."IntegrationSession"
     WHERE id=$1 AND "botId"=$2 AND "instanceId"=$3 AND "remoteJid"=$4
-      AND type='typebot' AND status='paused' RETURNING id`,
-   [session.id,botId,instanceUuid,session.remoteJid]);
+      AND type='typebot' AND status=$5 RETURNING id`,
+   [target.id,botId,instanceUuid,target.remoteJid,target.status]);
   if(deleted.rowCount!==1)throw Error('Exclusão não confirmada');
   await client.query('COMMIT');
+  return {deleted:true,remoteJid:target.remoteJid,previousStatus:target.status};
  }catch(e){await client.query('ROLLBACK');throw e}finally{client.release()}
 }
 // State machine conservadora: nunca reiniciar uma sessão humana por evento antigo.
@@ -274,6 +279,14 @@ async function work(){
        const bots=Array.isArray(config)?config:[config];
        const enabled=bots.filter(x=>x?.enabled&&typeof x.id==='string');
        if(enabled.length!==1)throw Error('É necessário exatamente um Typebot ativo por instância');
+       // O modo exclusão consulta o banco diretamente: a Evolution pode já ter
+       // mudado paused -> closed antes da chegada do webhook resolved.
+       if(event.bot_resolve_status==='delete_session'){
+        sessionChangeAttempted=true; // nenhuma repetição automática de DELETE após tentativa
+        const deletion=await deleteExactSession(event,enabled[0].id);
+        if(deletion.deleted){remoteJid=deletion.remoteJid;result='completed';reason=`session_deleted_from_${deletion.previousStatus}`;}
+        else{result='skipped';reason=deletion.reason;}
+       }else{
        const raw=await evolution(`/typebot/fetchSessions/${encodeURIComponent(enabled[0].id)}/${instance}`);
        const matched=matchPausedSession(event.payload,raw);
        reason=matched.reason;
@@ -301,17 +314,14 @@ async function work(){
          if(!stillResolved){result='skipped';reason='conversa_reaberta_antes_do_changeStatus';}
          else{
           sessionChangeAttempted=true;
-          if(event.bot_resolve_status==='delete_session'){
-           await deleteExactSession(event,sessions[0],enabled[0].id);
-          }else{
-           await evolution(`/typebot/changeStatus/${instance}`,{
-            method:'POST',headers:{'Content-Type':'application/json'},
-            body:JSON.stringify({remoteJid,status:event.bot_resolve_status})
-           });
-          }
+          await evolution(`/typebot/changeStatus/${instance}`,{
+           method:'POST',headers:{'Content-Type':'application/json'},
+           body:JSON.stringify({remoteJid,status:event.bot_resolve_status})
+          });
           result='completed';reason=`${event.bot_resolve_status}_${matched.reason}`;
          }
         }
+       }
        }
       }
      }
