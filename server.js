@@ -302,6 +302,33 @@ async function work(){
    // Nunca fazer retry após uma mutação remota de sessão; evita fechar a sessão seguinte.
    let sessionChangeAttempted=false;
    try{
+     // Comando interno do Typebot: EFFE_FINISH
+// Não consulta Chatwoot. Usa o mesmo motor seguro de exclusão.
+if(event.payload?.command==='EFFE_FINISH'){
+
+ const config=await evolution(`/typebot/find/${encodeURIComponent(event.instance)}`);
+ const bots=Array.isArray(config)?config:[config];
+
+ const enabled=bots.filter(x=>x?.enabled&&typeof x.id==='string');
+
+ if(enabled.length!==1)
+   throw Error('É necessário exatamente um Typebot ativo por instância');
+
+ sessionChangeAttempted=true;
+
+ const deletion=await deleteExactSession(event,enabled[0].id);
+
+ if(deletion.deleted){
+   remoteJid=deletion.remoteJid;
+   result='completed';
+   reason='session_deleted_from_finish_command';
+ }else{
+   result='skipped';
+   reason=deletion.reason;
+ }
+
+ continue;
+}
     const eventTime=new Date(event.created_at).getTime();
     if(!Number.isFinite(eventTime)||Date.now()-eventTime>EVENT_MAX_AGE_MS){
      result='skipped';reason='evento_antigo_mais_de_120s';
@@ -369,7 +396,9 @@ async function work(){
       }
      }
     }
-   }catch(e){
+    }
+
+    }catch(e){
     reason=String(e.message).slice(0,300);
     // Se a requisição changeStatus pode ter chegado ao servidor, não repetir.
     if(!sessionChangeAttempted&&locked.rows[0].attempts<3&&Date.now()-new Date(event.created_at).getTime()<EVENT_MAX_AGE_MS)result='retry';
