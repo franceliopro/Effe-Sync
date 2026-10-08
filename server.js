@@ -152,8 +152,147 @@ app.get('/login',(req,res)=>res.send(page('Entrar','<section><h1>Acesso administ
 const passwordHash=bcrypt.hashSync(process.env.ADMIN_PASSWORD,12);
 app.post('/login',csrf,async(req,res)=>{const ip=req.ip||'unknown';let a=attempts.get(ip)||{n:0,until:0};if(a.until>Date.now())return res.status(429).send('Tente novamente mais tarde');const correctEmail=String(req.body.email||'').toLowerCase()===process.env.ADMIN_EMAIL.toLowerCase();const correctPass=await bcrypt.compare(String(req.body.password||''),passwordHash);if(!correctEmail||!correctPass){a.n++;if(a.n>=5){a.n=0;a.until=Date.now()+15*60*1000}attempts.set(ip,a);return res.status(401).send(page('Acesso negado','<section>Credenciais inválidas. <a href="/login">Tentar novamente</a></section>'))}attempts.delete(ip);const exp=String(Date.now()+8*3600*1000);cookie(res,'bc_session',`${exp}.${sign(exp)}`,28800);res.redirect('/')});
 app.get('/logout',(req,res)=>{cookie(res,'bc_session','',0);res.redirect('/login')});
-app.get('/',admin,async(req,res)=>{const [c,i,e]=await Promise.all([pool.query('SELECT count(*)::int AS n FROM companies'),pool.query('SELECT count(*)::int AS n FROM integrations WHERE enabled'),pool.query("SELECT status,count(*)::int n FROM events GROUP BY status")]);res.send(page('Painel',`<h1>Visão geral</h1><section><h2>${c.rows[0].n} empresas • ${i.rows[0].n} instâncias ativas</h2>${e.rows.map(x=>`<p>${esc(x.status)}: <b>${x.n}</b></p>`).join('')||'<p>Nenhum evento ainda.</p>'}</section><section><h2>Próximos passos</h2><p>1. Cadastre empresa. 2. Cadastre instância vinculada a conta e inbox Chatwoot. 3. Configure o webhook gerado no Chatwoot. 4. Resolva uma conversa e confira o histórico.</p></section>`))});
-app.get('/companies',admin,async(req,res)=>{const r=await pool.query('SELECT * FROM companies ORDER BY id DESC');res.send(page('Empresas',`<h1>Empresas</h1><section><form method="POST"><label>Nome da empresa</label><input name="name" maxlength="120" required><button>Cadastrar empresa</button></form></section><section><table><tr><th>ID</th><th>Nome</th></tr>${r.rows.map(x=>`<tr><td>${x.id}</td><td>${esc(x.name)} <a href="/companies/${x.id}/edit">Editar</a></td></tr>`).join('')}</table></section>`))});
+app.get('/',admin,async(req,res)=>{
+
+const [
+ companies,
+ integrations,
+ events,
+ recent
+]=await Promise.all([
+
+pool.query(`
+ SELECT count(*)::int n
+ FROM companies
+`),
+
+pool.query(`
+ SELECT count(*)::int n
+ FROM integrations
+ WHERE enabled=true
+`),
+
+pool.query(`
+ SELECT 
+ status,
+ count(*)::int n
+ FROM events
+ GROUP BY status
+`),
+
+pool.query(`
+ SELECT 
+ e.status,
+ e.reason,
+ e.created_at,
+ i.label
+ FROM events e
+ JOIN integrations i ON i.id=e.integration_id
+ ORDER BY e.id DESC
+ LIMIT 8
+`)
+
+]);
+
+
+const stats={};
+
+events.rows.forEach(x=>{
+ stats[x.status]=x.n;
+});
+
+
+res.send(page('Dashboard',`
+
+<section>
+
+<h1>⚡ Painel EFFE Sync</h1>
+
+<p class="muted">
+Central inteligente de automações WhatsApp
+</p>
+
+</section>
+
+
+<div class="card-grid">
+
+
+<div class="card">
+<h3>🏢 Empresas</h3>
+<strong>${companies.rows[0].n}</strong>
+</div>
+
+
+<div class="card">
+<h3>🔌 Instâncias ativas</h3>
+<strong>${integrations.rows[0].n}</strong>
+</div>
+
+
+<div class="card">
+<h3>✅ Finalizados</h3>
+<strong>${stats.completed||0}</strong>
+</div>
+
+
+<div class="card">
+<h3>⚠️ Falhas</h3>
+<strong>${stats.failed||0}</strong>
+</div>
+
+
+</div>
+
+
+
+<section>
+
+<h2>Últimos eventos</h2>
+
+<table>
+
+<tr>
+<th>Status</th>
+<th>Instância</th>
+<th>Motivo</th>
+<th>Data</th>
+</tr>
+
+
+${recent.rows.map(x=>`
+
+<tr>
+
+<td>
+${esc(x.status)}
+</td>
+
+<td>
+${esc(x.label)}
+</td>
+
+<td>
+${esc(x.reason||'-')}
+</td>
+
+<td>
+${esc(x.created_at.toISOString())}
+</td>
+
+</tr>
+
+`).join('')}
+
+
+</table>
+
+</section>
+
+
+`));
+
+});app.get('/companies',admin,async(req,res)=>{const r=await pool.query('SELECT * FROM companies ORDER BY id DESC');res.send(page('Empresas',`<h1>Empresas</h1><section><form method="POST"><label>Nome da empresa</label><input name="name" maxlength="120" required><button>Cadastrar empresa</button></form></section><section><table><tr><th>ID</th><th>Nome</th></tr>${r.rows.map(x=>`<tr><td>${x.id}</td><td>${esc(x.name)} <a href="/companies/${x.id}/edit">Editar</a></td></tr>`).join('')}</table></section>`))});
 app.get('/companies/:id/edit',admin,async(req,res)=>{
  const r=await pool.query('SELECT id,name FROM companies WHERE id=$1',[req.params.id]);
  if(!r.rowCount)return res.status(404).send('Empresa não encontrada');
