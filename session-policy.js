@@ -2,7 +2,24 @@
 export function chooseSessionForDeletion(rows, eventTime) {
  const t=new Date(eventTime).getTime();
  if(!Number.isFinite(t))return {reason:'evento_sem_data_valida'};
- const sessions=rows.map(s=>({...s,createdMs:new Date(s.createdAt).getTime(),updatedMs:new Date(s.updatedAt).getTime()}));
+ const normalizeDate = (value) => {
+ const str = String(value);
+
+ // Já possui timezone
+ if (str.endsWith('Z') || /[+-]\d{2}:\d{2}$/.test(str)) {
+   return new Date(str).getTime();
+ }
+
+ // Evolution grava sem timezone.
+ // Considerar horário operacional UTC-4.
+ return new Date(str + '-04:00').getTime();
+};
+
+const sessions = rows.map(s => ({
+ ...s,
+ createdMs: normalizeDate(s.createdAt),
+ updatedMs: normalizeDate(s.updatedAt)
+}));
  if(sessions.some(s=>!s.id||!Number.isFinite(s.createdMs)||!Number.isFinite(s.updatedMs)))return {reason:'sessao_sem_data_valida'};
  // Inclui tolerância pequena para relógios dessíncronos; nunca tocar sessão nova.
  if(sessions.some(s=>s.createdMs>t+120000))return {reason:'sessao_fora_da_janela_de_seguranca'};
