@@ -90,5 +90,121 @@ function validSignature(req,secret){const timestamp=req.get('x-chatwoot-timestam
 app.post('/webhook/:path',async(req,res)=>{const r=await pool.query('SELECT * FROM integrations WHERE webhook_path=$1 AND enabled=true',[req.params.path]);const i=r.rows[0];if(!i)return res.status(404).json({error:'not found'});if(!validSignature(req,i.webhook_secret))return res.status(401).json({error:'invalid signature'});const p=req.body||{};if(p.event!=='conversation_status_changed'||p.status!=='resolved')return res.json({ignored:true});const {account,inbox}=accountInbox(p);if(account!==i.account_id||inbox!==i.inbox_id)return res.json({ignored:true,reason:'different inbox'});const conversationId=String(p.id??p.conversation?.id??'');if(!/^\d+$/.test(conversationId))return res.status(422).json({error:'missing conversation id'});const delivery=req.get('x-chatwoot-delivery');const key=delivery&&delivery.length<=150?delivery:crypto.createHash('sha256').update(req.rawBody).digest('hex');await pool.query('INSERT INTO events(integration_id,delivery_key,conversation_id,status,payload) VALUES($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING',[i.id,key,conversationId,'pending',JSON.stringify(p)]);res.status(202).json({accepted:true})});
 async function evolution(path,options={}){const ctrl=new AbortController();const t=setTimeout(()=>ctrl.abort(),12000);try{const u=process.env.EVOLUTION_URL.replace(/\/$/,'')+path;const response=await fetch(u,{...options,signal:ctrl.signal,headers:{apikey:process.env.EVOLUTION_API_KEY,...options.headers}});const txt=await response.text();if(!response.ok)throw Error(`Evolution HTTP ${response.status}: ${txt.slice(0,160)}`);if(!txt.trim())return {};try{return JSON.parse(txt)}catch{throw Error('Evolution returned non-JSON response')}}finally{clearTimeout(t)}}
 let working=false;
-async function work(){if(working)return;working=true;try{const rows=await pool.query("SELECT e.id,e.payload,i.instance FROM events e JOIN integrations i ON i.id=e.integration_id WHERE e.status='pending' AND i.enabled=true ORDER BY e.id LIMIT 10");for(const event of rows.rows){const locked=await pool.query("UPDATE events SET status='processing',attempts=attempts+1 WHERE id=$1 AND status='pending' RETURNING id,attempts",[event.id]);if(!locked.rowCount)continue;let status='failed',reason='',remoteJid=null;try{const payload=event.payload;const data=await evolution(`/typebot/fetchSessions/${encodeURIComponent(event.instance)}`);const matched=matchPausedSession(payload,data);reason=matched.reason;if(matched.remoteJid){remoteJid=matched.remoteJid;await evolution(`/typebot/changeStatus/${encodeURIComponent(event.instance)}`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({remoteJid,status:'closed'})});status='completed';reason='closed_'+matched.reason}else status='skipped'}catch(e){reason=String(e.message).slice(0,300);if(locked.rows[0].attempts<3)status='retry'}await pool.query('UPDATE events SET status=$2,reason=$3,remote_jid=$4,processed_at=now() WHERE id=$1',[event.id,status==='retry'?'pending':status,reason,remoteJid]);}}catch(e){console.error('Worker:',e.message)}finally{working=false}}
+
+async function work() {
+  if (working) return;
+  working = true;
+
+  try {
+    const rows = await pool.query(`
+      SELECT e.id, e.payload, i.instance
+      FROM events e
+      JOIN integrations i
+        ON i.id = e.integration_id
+      WHERE e.status = 'pending'
+        AND i.enabled = true
+      ORDER BY e.id
+      LIMIT 10
+    `);
+
+    for (const event of rows.rows) {
+      const locked = await pool.query(`
+        UPDATE events
+        SET status = 'processing',
+            attempts = attempts + 1
+        WHERE id = $1 AND status = 'pending'
+        RETURNING id, attempts
+      `, [event.id]);
+
+      if (!locked.rowCount) continue;
+
+      let status = 'failed';
+      let reason = '';
+      let remoteJid = null;
+
+      try {
+        const instance = encodeURIComponent(event.instance);
+
+        // Descobre o Typebot desta instância
+        const config = await evolution(
+          `/typebot/find/${instance}`
+        );
+
+        const bots = Array.isArray(config) ? config : [config];
+        const enabledBots = bots.filter(
+          bot => bot?.enabled && typeof bot.id === 'string'
+        );
+
+        if (enabledBots.length !== 1) {
+          throw new Error(
+            `Expected one enabled Typebot, found ${enabledBots.length}`
+          );
+        }
+
+        const typebotId = encodeURIComponent(enabledBots[0].id);
+
+        // Busca as sessões do Typebot correto
+        const sessions = await evolution(
+          `/typebot/fetchSessions/${typebotId}/${instance}`
+        );
+
+        // Identifica somente a sessão do contato correto
+        const matched = matchPausedSession(
+          event.payload,
+          sessions
+        );
+
+        reason = matched.reason;
+
+        if (matched.remoteJid) {
+          remoteJid = matched.remoteJid;
+
+          // Solicita o encerramento da sessão pausada
+          await evolution(
+            `/typebot/changeStatus/${instance}`,
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                remoteJid,
+                status: 'closed'
+              })
+            }
+          );
+
+          status = 'completed';
+          reason = 'closed_' + matched.reason;
+        } else {
+          status = 'skipped';
+        }
+      } catch (e) {
+        reason = String(e.message).slice(0, 300);
+
+        if (locked.rows[0].attempts < 3) {
+          status = 'retry';
+        }
+      }
+
+      await pool.query(`
+        UPDATE events
+        SET status = $2,
+            reason = $3,
+            remote_jid = $4,
+            processed_at = now()
+        WHERE id = $1
+      `, [
+        event.id,
+        status === 'retry' ? 'pending' : status,
+        reason,
+        remoteJid
+      ]);
+    }
+  } catch (e) {
+    console.error('Worker:', e.message);
+  } finally {
+    working = false;
+  }
+}
 await init();setInterval(work,4000).unref();app.listen(Number(process.env.PORT||3000),'0.0.0.0',()=>console.log('Bot Control listening'));
