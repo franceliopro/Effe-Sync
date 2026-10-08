@@ -32,234 +32,108 @@ function csrf(req,res,next){
   next();
 }
 function page(title,inner){
-return `
-<!doctype html>
+return `<!doctype html>
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-
 <title>${esc(title)} • EFFE Sync</title>
 
 <style>
-
-*{
- box-sizing:border-box;
-}
-
 body{
- margin:0;
- background:#f4f7fb;
- color:#172033;
- font:15px system-ui,-apple-system,Segoe UI,sans-serif;
+margin:0;
+background:#f4f7fb;
+color:#172033;
+font:15px system-ui,sans-serif;
 }
 
-.layout{
- display:flex;
- min-height:100vh;
+nav{
+background:#101c35;
+color:white;
+padding:18px 24px;
 }
 
-.sidebar{
- width:260px;
- background:#101c35;
- color:white;
- padding:24px 18px;
- position:fixed;
- height:100vh;
+nav a{
+color:white;
+margin-right:20px;
+text-decoration:none;
 }
 
-.brand{
- font-size:22px;
- font-weight:800;
- margin-bottom:30px;
-}
-
-.brand span{
- color:#4da3ff;
-}
-
-.sidebar a{
- display:block;
- color:#dce7ff;
- text-decoration:none;
- padding:12px 14px;
- border-radius:10px;
- margin-bottom:6px;
-}
-
-.sidebar a:hover{
- background:#1c3158;
- color:white;
-}
-
-.content{
- margin-left:260px;
- width:100%;
- padding:30px;
-}
-
-.header{
- background:white;
- border:1px solid #e1e8f0;
- border-radius:18px;
- padding:24px;
- margin-bottom:25px;
- box-shadow:0 8px 25px rgba(15,30,60,.05);
-}
-
-h1{
- margin:0;
- font-size:30px;
+main{
+max-width:1100px;
+margin:30px auto;
+padding:0 18px;
 }
 
 section{
- background:white;
- border:1px solid #e1e8f0;
- border-radius:18px;
- padding:22px;
- margin-bottom:22px;
- box-shadow:0 8px 25px rgba(15,30,60,.04);
- overflow:auto;
+background:white;
+border:1px solid #dfe6ef;
+border-radius:16px;
+padding:22px;
+margin:18px 0;
 }
 
-.card-grid{
- display:grid;
- grid-template-columns:repeat(auto-fit,minmax(200px,1fr));
- gap:18px;
-}
-
-.card{
- background:white;
- border:1px solid #e1e8f0;
- border-radius:18px;
- padding:20px;
-}
-
-.card h3{
- margin:0;
- color:#667085;
- font-size:14px;
-}
-
-.card strong{
- display:block;
- margin-top:10px;
- font-size:32px;
+h1{
+font-size:28px;
 }
 
 button{
- background:#2167e8;
- color:white;
- border:0;
- padding:12px 20px;
- border-radius:10px;
- cursor:pointer;
+background:#2167e8;
+color:white;
+border:0;
+padding:10px 18px;
+border-radius:8px;
 }
 
 input,select{
- width:100%;
- max-width:480px;
- padding:11px;
- border-radius:9px;
- border:1px solid #ccd5e1;
- margin:6px 0 15px;
-}
-
-label{
- display:block;
- font-weight:600;
+width:100%;
+max-width:480px;
+padding:10px;
+border-radius:8px;
+border:1px solid #ccd5e1;
 }
 
 table{
- width:100%;
- border-collapse:collapse;
+width:100%;
+border-collapse:collapse;
 }
 
 td,th{
- padding:12px;
- border-bottom:1px solid #edf1f5;
- text-align:left;
+padding:12px;
+border-bottom:1px solid #eee;
+text-align:left;
 }
 
-.warning{
- background:#fff5d8;
- padding:14px;
- border-radius:10px;
+@media(max-width:700px){
+nav a{
+display:block;
+margin:10px 0;
 }
-
-.pill{
- background:#daf8e2;
- color:#087443;
- padding:5px 10px;
- border-radius:20px;
 }
-
-small,.muted{
- color:#667085;
-}
-
-
-@media(max-width:800px){
-
-.sidebar{
- position:relative;
- width:100%;
- height:auto;
-}
-
-.layout{
- display:block;
-}
-
-.content{
- margin-left:0;
- padding:15px;
-}
-
-}
-
 </style>
 
 </head>
 
 <body>
 
-<div class="layout">
-
-<nav class="sidebar">
-
-<div class="brand">
-⚡ EFFE <span>Sync</span>
-</div>
-
-<a href="/">🏠 Dashboard</a>
-<a href="/companies">🏢 Empresas</a>
-<a href="/integrations">🔌 Instâncias</a>
-<a href="/automations">🤖 Automações</a>
-<a href="/events">📊 Eventos</a>
-<a href="/logout">🚪 Sair</a>
-
+<nav>
+<strong>⚡ EFFE Sync</strong>
+&nbsp;
+<a href="/">Painel</a>
+<a href="/companies">Empresas</a>
+<a href="/integrations">Instâncias</a>
+<a href="/automations">Automações</a>
+<a href="/events">Eventos</a>
+<a href="/logout">Sair</a>
 </nav>
 
-
-<main class="content">
-
-<div class="header">
-
-<h1>${esc(title)}</h1>
-
-</div>
-
+<main>
 ${inner}
-
 </main>
 
-</div>
-
 </body>
-</html>
-`;
-}`}
+</html>`;
+}
 const fail=(res,e)=>res.status(400).send(page('Erro',`<section><h2>Não foi possível concluir</h2><p>${esc(e.message||e)}</p><a href="/">Voltar</a></section>`));
 async function init(){await pool.query(`CREATE TABLE IF NOT EXISTS companies(id BIGSERIAL PRIMARY KEY,name TEXT NOT NULL UNIQUE,created_at TIMESTAMPTZ DEFAULT now());CREATE TABLE IF NOT EXISTS integrations(id BIGSERIAL PRIMARY KEY,company_id BIGINT NOT NULL REFERENCES companies(id),label TEXT NOT NULL,instance TEXT NOT NULL,account_id INTEGER NOT NULL CHECK(account_id>0),inbox_id INTEGER NOT NULL CHECK(inbox_id>0),webhook_path TEXT NOT NULL UNIQUE,webhook_secret TEXT NOT NULL,enabled BOOLEAN NOT NULL DEFAULT true,created_at TIMESTAMPTZ DEFAULT now(),UNIQUE(account_id,inbox_id));CREATE TABLE IF NOT EXISTS events(id BIGSERIAL PRIMARY KEY,integration_id BIGINT NOT NULL REFERENCES integrations(id),delivery_key TEXT NOT NULL,conversation_id TEXT,status TEXT NOT NULL DEFAULT 'pending',reason TEXT,payload JSONB,remote_jid TEXT,attempts INT NOT NULL DEFAULT 0,created_at TIMESTAMPTZ DEFAULT now(),processed_at TIMESTAMPTZ,UNIQUE(integration_id,delivery_key));CREATE INDEX IF NOT EXISTS events_pending_idx ON events(status,created_at);ALTER TABLE integrations ADD COLUMN IF NOT EXISTS clear_assignment_on_resolve BOOLEAN NOT NULL DEFAULT false;ALTER TABLE integrations ADD COLUMN IF NOT EXISTS bot_resolve_status TEXT NOT NULL DEFAULT 'opened';ALTER TABLE integrations ADD COLUMN IF NOT EXISTS evolution_instance_id TEXT;CREATE TABLE IF NOT EXISTS automation_rules(id BIGSERIAL PRIMARY KEY,integration_id BIGINT NOT NULL REFERENCES integrations(id) ON DELETE CASCADE,event TEXT NOT NULL CHECK(event='conversation.resolved'),action TEXT NOT NULL CHECK(action IN ('chatwoot.clear_assignment','typebot.delete_session','typebot.open_session','typebot.close_session','audit.only')),enabled BOOLEAN NOT NULL DEFAULT true,created_at TIMESTAMPTZ NOT NULL DEFAULT now(),UNIQUE(integration_id,event,action));`)}
 app.get('/health',async(req,res)=>{try{await pool.query('SELECT 1');res.json({ok:true})}catch{res.status(503).json({ok:false})}});
