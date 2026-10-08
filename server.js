@@ -135,6 +135,11 @@ color:#24324a;
 table{
 width:100%;
 border-collapse:collapse;
+min-width:700px;
+}
+
+section{
+overflow-x:auto;
 }
 
 td,th{
@@ -144,10 +149,33 @@ text-align:left;
 }
 
 @media(max-width:700px){
+
+nav{
+padding:16px;
+}
+
 nav a{
 display:block;
-margin:10px 0;
+margin:12px 0;
+font-size:16px;
 }
+
+main{
+padding:0 12px;
+}
+
+section{
+padding:18px;
+}
+
+.card-grid{
+grid-template-columns:1fr;
+}
+
+table{
+font-size:14px;
+}
+
 }
 </style>
 
