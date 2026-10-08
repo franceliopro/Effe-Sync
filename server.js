@@ -9,6 +9,8 @@ const required=['DATABASE_URL','SESSION_SECRET','ADMIN_EMAIL','ADMIN_PASSWORD','
 for(const k of required)if(!process.env[k])throw Error(`Missing ${k}`);
 if(process.env.SESSION_SECRET.length<32)throw Error('SESSION_SECRET must be at least 32 characters');
 const pool=new pg.Pool({connectionString:process.env.DATABASE_URL,ssl:process.env.DATABASE_SSL==='true'?{rejectUnauthorized:true}:false});
+// Conexão independente e restrita ao banco da Evolution, ativada somente no modo delete_session.
+const evolutionDb=process.env.EVOLUTION_DATABASE_URL ? new pg.Pool({connectionString:process.env.EVOLUTION_DATABASE_URL,ssl:process.env.EVOLUTION_DATABASE_SSL==='true'?{rejectUnauthorized:true}:false,max:3}) : null;
 const app=express(); app.disable('x-powered-by'); app.set('trust proxy',1);app.use(helmet({contentSecurityPolicy:false,referrerPolicy:{policy:'strict-origin-when-cross-origin'}}));
 app.use(express.urlencoded({extended:false,limit:'12kb'}));app.use(express.json({limit:'128kb',verify:(req,res,buf)=>{req.rawBody=Buffer.from(buf)}}));
 const url=process.env.PUBLIC_URL.replace(/\/$/,'');
@@ -30,7 +32,7 @@ function csrf(req,res,next){
 }
 function page(title,inner){return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)} • EFFE Sync</title><style>body{margin:0;background:#f5f7fb;color:#1a2739;font:15px system-ui,sans-serif}main{max-width:1080px;margin:30px auto;padding:0 18px}nav{background:#13233e;color:white;padding:18px 24px}nav a{color:white;margin-right:22px}a{color:#245ec0}h1{font-size:28px}section{background:white;border:1px solid #dae2ec;border-radius:12px;padding:20px;margin:18px 0;overflow:auto}input,select{width:100%;max-width:480px;padding:10px;margin:6px 0 16px;box-sizing:border-box;border:1px solid #cbd5e1;border-radius:7px}label{display:block;font-weight:600}button{border:0;background:#215fca;color:white;padding:11px 18px;border-radius:8px;cursor:pointer}table{border-collapse:collapse;width:100%}td,th{text-align:left;border-bottom:1px solid #e6ebf0;padding:12px}small,.muted{color:#5f6f83}code{word-break:break-all}pre{white-space:pre-wrap}form.inline{display:inline}form.inline button{background:#9f3c3c} .pill{background:#e1f5e6;color:#15703d;padding:4px 9px;border-radius:12px} .warning{background:#fff4d8;padding:12px;border-radius:8px}</style></head><body><nav><strong>EFFE Sync</strong>　 <a href="/">Painel</a><a href="/companies">Empresas</a><a href="/integrations">Instâncias</a><a href="/events">Eventos</a><a href="/logout">Sair</a></nav><main>${inner}</main></body></html>`}
 const fail=(res,e)=>res.status(400).send(page('Erro',`<section><h2>Não foi possível concluir</h2><p>${esc(e.message||e)}</p><a href="/">Voltar</a></section>`));
-async function init(){await pool.query(`CREATE TABLE IF NOT EXISTS companies(id BIGSERIAL PRIMARY KEY,name TEXT NOT NULL UNIQUE,created_at TIMESTAMPTZ DEFAULT now());CREATE TABLE IF NOT EXISTS integrations(id BIGSERIAL PRIMARY KEY,company_id BIGINT NOT NULL REFERENCES companies(id),label TEXT NOT NULL,instance TEXT NOT NULL,account_id INTEGER NOT NULL CHECK(account_id>0),inbox_id INTEGER NOT NULL CHECK(inbox_id>0),webhook_path TEXT NOT NULL UNIQUE,webhook_secret TEXT NOT NULL,enabled BOOLEAN NOT NULL DEFAULT true,created_at TIMESTAMPTZ DEFAULT now(),UNIQUE(account_id,inbox_id));CREATE TABLE IF NOT EXISTS events(id BIGSERIAL PRIMARY KEY,integration_id BIGINT NOT NULL REFERENCES integrations(id),delivery_key TEXT NOT NULL,conversation_id TEXT,status TEXT NOT NULL DEFAULT 'pending',reason TEXT,payload JSONB,remote_jid TEXT,attempts INT NOT NULL DEFAULT 0,created_at TIMESTAMPTZ DEFAULT now(),processed_at TIMESTAMPTZ,UNIQUE(integration_id,delivery_key));CREATE INDEX IF NOT EXISTS events_pending_idx ON events(status,created_at);ALTER TABLE integrations ADD COLUMN IF NOT EXISTS clear_assignment_on_resolve BOOLEAN NOT NULL DEFAULT false;ALTER TABLE integrations ADD COLUMN IF NOT EXISTS bot_resolve_status TEXT NOT NULL DEFAULT 'opened';`)}
+async function init(){await pool.query(`CREATE TABLE IF NOT EXISTS companies(id BIGSERIAL PRIMARY KEY,name TEXT NOT NULL UNIQUE,created_at TIMESTAMPTZ DEFAULT now());CREATE TABLE IF NOT EXISTS integrations(id BIGSERIAL PRIMARY KEY,company_id BIGINT NOT NULL REFERENCES companies(id),label TEXT NOT NULL,instance TEXT NOT NULL,account_id INTEGER NOT NULL CHECK(account_id>0),inbox_id INTEGER NOT NULL CHECK(inbox_id>0),webhook_path TEXT NOT NULL UNIQUE,webhook_secret TEXT NOT NULL,enabled BOOLEAN NOT NULL DEFAULT true,created_at TIMESTAMPTZ DEFAULT now(),UNIQUE(account_id,inbox_id));CREATE TABLE IF NOT EXISTS events(id BIGSERIAL PRIMARY KEY,integration_id BIGINT NOT NULL REFERENCES integrations(id),delivery_key TEXT NOT NULL,conversation_id TEXT,status TEXT NOT NULL DEFAULT 'pending',reason TEXT,payload JSONB,remote_jid TEXT,attempts INT NOT NULL DEFAULT 0,created_at TIMESTAMPTZ DEFAULT now(),processed_at TIMESTAMPTZ,UNIQUE(integration_id,delivery_key));CREATE INDEX IF NOT EXISTS events_pending_idx ON events(status,created_at);ALTER TABLE integrations ADD COLUMN IF NOT EXISTS clear_assignment_on_resolve BOOLEAN NOT NULL DEFAULT false;ALTER TABLE integrations ADD COLUMN IF NOT EXISTS bot_resolve_status TEXT NOT NULL DEFAULT 'opened';ALTER TABLE integrations ADD COLUMN IF NOT EXISTS evolution_instance_id TEXT;`)}
 app.get('/health',async(req,res)=>{try{await pool.query('SELECT 1');res.json({ok:true})}catch{res.status(503).json({ok:false})}});
 let attempts=new Map();
 app.get('/login',(req,res)=>res.send(page('Entrar','<section><h1>Acesso administrativo</h1><form method="POST" action="/login"><label>Email</label><input name="email" type="email" required><label>Senha</label><input name="password" type="password" required><button>Entrar</button></form></section>')));
@@ -66,11 +68,13 @@ app.get('/integrations/:id/edit',admin,async(req,res)=>{
  <label>Instância Evolution</label><input name="instance" required value="${esc(i.instance)}">
  <label>ID da conta Chatwoot</label><input name="account_id" type="number" min="1" required value="${i.account_id}">
  <label>ID da inbox Chatwoot</label><input name="inbox_id" type="number" min="1" required value="${i.inbox_id}">
+  <label>UUID interno da instância na Evolution (necessário para excluir sessão)</label><input name="evolution_instance_id" maxlength="100" value="${esc(i.evolution_instance_id||'')}" placeholder="UUID da coluna instanceId">
  <label>Novo segredo webhook (opcional)</label><input type="password" name="webhook_secret" autocomplete="new-password" placeholder="Vazio = manter atual">
  <label>Ao resolver, ação na sessão Typebot</label><select name="bot_resolve_status">
  <option value="opened" ${i.bot_resolve_status==='opened'?'selected':''}>opened — retomar sessão</option>
  <option value="closed" ${i.bot_resolve_status==='closed'?'selected':''}>closed — encerrar sessão</option>
-  <option value="manual" ${i.bot_resolve_status==='manual'?'selected':''}>manual — não modificar sessão Typebot</option></select>
+  <option value="manual" ${i.bot_resolve_status==='manual'?'selected':''}>manual — não modificar sessão Typebot</option>
+  <option value="delete_session" ${i.bot_resolve_status==='delete_session'?'selected':''}>Excluir sessão após Resolver (nova execução no próximo Oi)</option></select>
  <label><input type="checkbox" name="clear_assignment_on_resolve" value="1" style="width:auto" ${i.clear_assignment_on_resolve?'checked':''}> Remover agente e time após Resolver</label>
  <label><input type="checkbox" name="enabled" value="1" style="width:auto" ${i.enabled?'checked':''}> Integração ativa</label>
  <p>Webhook atual: <code>${esc(url+'/webhook/'+i.webhook_path)}</code></p>
@@ -83,12 +87,15 @@ app.post('/integrations/:id/edit',admin,csrf,async(req,res)=>{
   const companyId=Number(b.company_id),accountId=Number(b.account_id),inboxId=Number(b.inbox_id);
   if(!/^[\w.-]{1,120}$/.test(instance)||!label||label.length>120)throw Error('Nome ou instância inválida');
   if(![companyId,accountId,inboxId].every(v=>Number.isSafeInteger(v)&&v>0))throw Error('IDs inválidos');
+  const internalId=String(b.evolution_instance_id||'').trim();
+  if(internalId&&!/^[0-9a-fA-F-]{36}$/.test(internalId))throw Error('UUID interno inválido');
+  if(b.bot_resolve_status==='delete_session'&&!internalId)throw Error('Informe o UUID interno da instância Evolution para excluir sessão');
   const secret=String(b.webhook_secret||'');if(secret&&secret.length<8)throw Error('Novo segredo muito curto');
-  if(!['opened','closed','manual'].includes(b.bot_resolve_status))throw Error('Ação Typebot inválida');
+  if(!['opened','closed','manual','delete_session'].includes(b.bot_resolve_status))throw Error('Ação Typebot inválida');
   const r=await pool.query(`UPDATE integrations SET company_id=$1,label=$2,instance=$3,account_id=$4,inbox_id=$5,
     webhook_secret=COALESCE(NULLIF($6,''),webhook_secret),enabled=$7,clear_assignment_on_resolve=$8,
-    bot_resolve_status=$9 WHERE id=$10 RETURNING id`,[
-    companyId,label,instance,accountId,inboxId,secret,b.enabled==='1',b.clear_assignment_on_resolve==='1',b.bot_resolve_status,req.params.id
+    bot_resolve_status=$9,evolution_instance_id=$11 WHERE id=$10 RETURNING id`,[
+    companyId,label,instance,accountId,inboxId,secret,b.enabled==='1',b.clear_assignment_on_resolve==='1',b.bot_resolve_status,req.params.id,internalId||null
   ]);
   if(!r.rowCount)throw Error('Integração não encontrada');
   res.redirect('/integrations');
@@ -136,6 +143,35 @@ async function clearResolvedAssignment(event){
   throw Error('Não foi possível confirmar remoção de agente e time');
  }
 }
+// Exclui somente o registro exato, do bot, instância e contato do evento.
+// Não usa DELETE por telefone isolado. Um evento antigo jamais deve atingir sessão nova.
+async function deleteExactSession(event, session, botId){
+ if(!evolutionDb)throw Error('Configure EVOLUTION_DATABASE_URL no Coolify');
+ if(!event.evolution_instance_id)throw Error('UUID interno Evolution ausente');
+ if(!session?.id||!session?.remoteJid||session.status!=='paused')throw Error('Sessão não está pausada ou falta ID');
+ if(!/^[a-zA-Z0-9_-]{8,128}$/.test(session.id))throw Error('ID de sessão inválido');
+ const client=await evolutionDb.connect();
+ try{
+  await client.query('BEGIN');
+  // Lock impede exclusão concorrente do mesmo registro. Nada é deletado em caso de divergência.
+  const result=await client.query(`SELECT id,"createdAt",status FROM public."IntegrationSession"
+     WHERE id=$1 AND "botId"=$2 AND "instanceId"=$3 AND "remoteJid"=$4
+       AND type='typebot' AND status='paused' FOR UPDATE`,
+    [session.id,botId,event.evolution_instance_id,session.remoteJid]);
+  if(result.rowCount!==1)throw Error('Registro exato não encontrado; exclusão bloqueada');
+  const created=new Date(result.rows[0].createdAt).getTime();
+  const eventTime=new Date(event.created_at).getTime();
+  if(!Number.isFinite(created)||created>eventTime)throw Error('Sessão mais recente que evento; exclusão bloqueada');
+  // Uma nova leitura do Chatwoot antes do commit diminui a janela de corrida.
+  if(!await getResolvedConversation(event))throw Error('Conversa reaberta; exclusão bloqueada');
+  const deleted=await client.query(`DELETE FROM public."IntegrationSession"
+    WHERE id=$1 AND "botId"=$2 AND "instanceId"=$3 AND "remoteJid"=$4
+      AND type='typebot' AND status='paused' RETURNING id`,
+   [session.id,botId,event.evolution_instance_id,session.remoteJid]);
+  if(deleted.rowCount!==1)throw Error('Exclusão não confirmada');
+  await client.query('COMMIT');
+ }catch(e){await client.query('ROLLBACK');throw e}finally{client.release()}
+}
 // State machine conservadora: nunca reiniciar uma sessão humana por evento antigo.
 const EVENT_MAX_AGE_MS=120000;
 let working=false;
@@ -143,7 +179,7 @@ async function work(){
  if(working)return;working=true;
  try{
   const rows=await pool.query(`SELECT e.id,e.payload,e.conversation_id,e.created_at,e.attempts,
-    i.instance,i.account_id,i.inbox_id,i.bot_resolve_status,i.clear_assignment_on_resolve
+    i.instance,i.account_id,i.inbox_id,i.bot_resolve_status,i.clear_assignment_on_resolve,i.evolution_instance_id
     FROM events e JOIN integrations i ON i.id=e.integration_id
     WHERE e.status='pending' AND i.enabled=true ORDER BY e.id LIMIT 10`);
   for(const event of rows.rows){
@@ -200,10 +236,14 @@ async function work(){
          if(!stillResolved){result='skipped';reason='conversa_reaberta_antes_do_changeStatus';}
          else{
           sessionChangeAttempted=true;
-          await evolution(`/typebot/changeStatus/${instance}`,{
-           method:'POST',headers:{'Content-Type':'application/json'},
-           body:JSON.stringify({remoteJid,status:event.bot_resolve_status})
-          });
+          if(event.bot_resolve_status==='delete_session'){
+           await deleteExactSession(event,sessions[0],enabled[0].id);
+          }else{
+           await evolution(`/typebot/changeStatus/${instance}`,{
+            method:'POST',headers:{'Content-Type':'application/json'},
+            body:JSON.stringify({remoteJid,status:event.bot_resolve_status})
+           });
+          }
           result='completed';reason=`${event.bot_resolve_status}_${matched.reason}`;
          }
         }
