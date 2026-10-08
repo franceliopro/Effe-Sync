@@ -396,8 +396,6 @@ if(event.payload?.command==='EFFE_FINISH'){
       }
      }
     }
-    }
-
     }catch(e){
     reason=String(e.message).slice(0,300);
     // Se a requisição changeStatus pode ter chegado ao servidor, não repetir.
