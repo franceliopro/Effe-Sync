@@ -45,6 +45,36 @@ WHERE company_id=$1
 return r.rows[0]||{};
 
 }
+
+async function getCompanyContext(companyId){
+
+const r = await pool.query(`
+SELECT
+ c.id AS company_id,
+ c.name AS company_name,
+ c.tenant_id,
+ t.name AS tenant_name
+FROM companies c
+LEFT JOIN tenants t
+ON t.id=c.tenant_id
+WHERE c.id=$1
+`,
+[companyId]);
+
+if(!r.rowCount)
+ return {};
+
+const company = r.rows[0];
+
+const brand = await getTenantBranding(company.tenant_id);
+
+return {
+ ...company,
+ ...brand
+};
+
+}
+
 async function getCompanyBranding(companyId){
 
 if(!companyId) return {};
