@@ -69,30 +69,6 @@ return r.rows[0] || {};
 
 }
 
-async function getTenantBranding(tenantId){
-
-if(!tenantId) return {};
-
-const r = await pool.query(`
-SELECT
- t.name AS tenant_name,
- b.brand_name,
- b.logo_url,
- b.primary_color,
- b.secondary_color,
- b.theme,
- b.favicon_url
-FROM tenants t
-LEFT JOIN tenant_branding b
-ON b.tenant_id=t.id
-WHERE t.id=$1
-`,
-[tenantId]);
-
-return r.rows[0] || {};
-
-}
-
 async function getTenantFromCompany(companyId){
 
 const r = await pool.query(`
