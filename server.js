@@ -103,7 +103,7 @@ return r.rows[0] || {};
 function page(title,inner,brand={}){
   async function companyPage(req,title,inner){
 
-const brand = await getCompanyBranding(req.params.id);
+const brand = await getCompanyContext(req.params.id);
 
 return page(title,inner,brand);
 
