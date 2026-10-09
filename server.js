@@ -69,7 +69,7 @@ return r.rows[0] || {};
 
 }
 
-async function getTenantFromCompany(companyId){
+async function getTenantBranding(tenantId){
 
 const r = await pool.query(`
 SELECT tenant_id
