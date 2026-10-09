@@ -31,7 +31,30 @@ function csrf(req,res,next){
   catch{return res.status(403).send('Origem inválida')}
   next();
 }
-function page(title,inner){
+async function getBranding(companyId){
+
+if(!companyId) return {};
+
+const r=await pool.query(`
+SELECT *
+FROM company_branding
+WHERE company_id=$1
+`,
+[companyId]);
+
+return r.rows[0]||{};
+
+}
+function page(title,inner,brand={}){
+
+const brandName=brand.company_name||'EFFE Sync';
+
+const primary=brand.primary_color||'#215fca';
+
+const secondary=brand.secondary_color||'#13233e';
+
+const logo=brand.logo_url||'';
+
 return `<!doctype html>
 <html lang="pt-BR">
 <head>
@@ -60,7 +83,7 @@ text-decoration:none;
 }
 
 .top-nav{
-background:#101c35;
+background:${secondary};
 color:white;
 padding:18px 28px;
 display:flex;
@@ -282,7 +305,11 @@ font-size:14px;
 <nav class="top-nav">
 
 <div class="brand">
-⚡ EFFE <span>Sync</span>
+
+${logo ? `<img src="${esc(logo)}" style="height:28px;vertical-align:middle;border-radius:6px;margin-right:8px">` : '⚡'}
+
+${esc(brandName)}
+
 </div>
 
 <button class="menu-toggle" onclick="document.body.classList.toggle('menu-open')">
