@@ -45,34 +45,6 @@ WHERE company_id=$1
 return r.rows[0]||{};
 
 }
-async function getCompanyBranding(companyId){
-
-if(!companyId) return {};
-
-const r = await pool.query(`
-SELECT
- c.name AS company_name,
- b.brand_name,
- b.logo_url,
- b.primary_color,
- b.secondary_color,
- b.theme,
- b.favicon_url
-FROM companies c
-LEFT JOIN company_branding b
-ON b.company_id=c.id
-WHERE c.id=$1
-`,
-[companyId]);
-
-return r.rows[0] || {};
-
-}
-
-return r.rows[0] || {};
-
-}
-
 
 async function getCompanyContext(companyId){
 
@@ -100,6 +72,33 @@ return {
  ...company,
  ...brand
 };
+
+}
+async function getCompanyBranding(companyId){
+
+if(!companyId) return {};
+
+const r = await pool.query(`
+SELECT
+ c.name AS company_name,
+ b.brand_name,
+ b.logo_url,
+ b.primary_color,
+ b.secondary_color,
+ b.theme,
+ b.favicon_url
+FROM companies c
+LEFT JOIN company_branding b
+ON b.company_id=c.id
+WHERE c.id=$1
+`,
+[companyId]);
+
+return r.rows[0] || {};
+
+}
+
+return r.rows[0] || {};
 
 }
 
