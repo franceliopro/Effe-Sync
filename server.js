@@ -665,7 +665,7 @@ if(!c)
  return res.status(404).send('Empresa não encontrada');
 
 
-const brand = await getCompanyBranding(req.params.id);
+const brand = await getCompanyContext(req.params.id);
 
 
 res.send(page('Editar empresa',`
@@ -739,7 +739,7 @@ const brand=await pool.query(
 
 const b=brand.rows[0]||{};
 
-const pageBrand = await getCompanyBranding(req.params.id);
+const pageBrand = await getCompanyContext(req.params.id);
 
 
 res.send(page('Identidade Visual',`
