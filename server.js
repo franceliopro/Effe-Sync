@@ -530,6 +530,8 @@ ${esc(x.created_at.toISOString())}
 <a href="/companies/${x.id}/branding">🎨 Identidade Visual</a></td></tr>`).join('')}</table></section>`))});
 app.get('/companies/:id/edit',admin,async(req,res)=>{
 
+console.log("ENTROU NA ROTA EDIT");
+
 const r=await pool.query(
 'SELECT * FROM companies WHERE id=$1',
 [req.params.id]
