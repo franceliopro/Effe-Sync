@@ -530,8 +530,6 @@ ${esc(x.created_at.toISOString())}
 <a href="/companies/${x.id}/branding">🎨 Identidade Visual</a></td></tr>`).join('')}</table></section>`))});
 app.get('/companies/:id/edit',admin,async(req,res)=>{
 
-console.log("ENTROU NA ROTA EDIT");
-
 const r=await pool.query(
 'SELECT * FROM companies WHERE id=$1',
 [req.params.id]
@@ -539,16 +537,55 @@ const r=await pool.query(
 
 const c=r.rows[0];
 
+if(!c)
+ return res.status(404).send('Empresa não encontrada');
+
+
 const brand = await getCompanyBranding(req.params.id);
 
-console.log("BRANDING EDIT:", brand);
 
 res.send(page('Editar empresa',`
 
 <section>
+
 <h1>Editar empresa</h1>
 
-...
+<form method="POST" action="/companies/${c.id}/edit">
+
+<label>
+Nome da empresa
+</label>
+
+<input
+name="name"
+value="${esc(c.name)}"
+maxlength="120"
+required
+>
+
+<button>
+Salvar empresa
+</button>
+
+</form>
+
+</section>
+
+
+<section>
+
+<h2>🎨 Identidade visual</h2>
+
+<p>
+Configure logo e cores desta empresa.
+</p>
+
+<a href="/companies/${c.id}/branding">
+<button type="button">
+Abrir identidade visual
+</button>
+</a>
+
 </section>
 
 `,brand));
