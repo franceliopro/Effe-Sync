@@ -68,6 +68,44 @@ WHERE c.id=$1
 return r.rows[0] || {};
 
 }
+
+async function getTenantBranding(tenantId){
+
+if(!tenantId) return {};
+
+const r = await pool.query(`
+SELECT
+ t.name AS tenant_name,
+ b.brand_name,
+ b.logo_url,
+ b.primary_color,
+ b.secondary_color,
+ b.theme,
+ b.favicon_url
+FROM tenants t
+LEFT JOIN tenant_branding b
+ON b.tenant_id=t.id
+WHERE t.id=$1
+`,
+[tenantId]);
+
+return r.rows[0] || {};
+
+}
+
+async function getTenantFromCompany(companyId){
+
+const r = await pool.query(`
+SELECT tenant_id
+FROM companies
+WHERE id=$1
+`,
+[companyId]);
+
+return r.rows[0]?.tenant_id || null;
+
+}
+
 function page(title,inner,brand={}){
   async function companyPage(req,title,inner){
 
