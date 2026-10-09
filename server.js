@@ -66,6 +66,13 @@ return r.rows[0] || {};
 
 }
 function page(title,inner,brand={}){
+  async function companyPage(req,title,inner){
+
+const brand = await getCompanyBranding(req.params.id);
+
+return page(title,inner,brand);
+
+}
 
 const brandName=brand.company_name||'EFFE Sync';
 
