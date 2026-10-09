@@ -375,7 +375,19 @@ primary_color TEXT DEFAULT '#215fca',
 secondary_color TEXT DEFAULT '#13233e',
 created_at TIMESTAMPTZ DEFAULT now(),
 UNIQUE(company_id)
-);`)}
+);
+CREATE TABLE IF NOT EXISTS tenants(
+ id BIGSERIAL PRIMARY KEY,
+ name TEXT NOT NULL,
+ slug TEXT NOT NULL UNIQUE,
+ active BOOLEAN NOT NULL DEFAULT true,
+ created_at TIMESTAMPTZ DEFAULT now()
+);
+
+ALTER TABLE companies
+ADD COLUMN IF NOT EXISTS tenant_id BIGINT
+REFERENCES tenants(id);
+`)}
 app.get('/health',async(req,res)=>{try{await pool.query('SELECT 1');res.json({ok:true})}catch{res.status(503).json({ok:false})}});
 let attempts=new Map();
 app.get('/login',(req,res)=>res.send(page('Entrar','<section><h1>Acesso administrativo</h1><form method="POST" action="/login"><label>Email</label><input name="email" type="email" required><label>Senha</label><input name="password" type="password" required><button>Entrar</button></form></section>')));
