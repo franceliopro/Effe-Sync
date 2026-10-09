@@ -398,6 +398,15 @@ CREATE TABLE IF NOT EXISTS modules(
  updated_at TIMESTAMPTZ DEFAULT now(),
  UNIQUE(tenant_id,module_key)
 );
+
+CREATE TABLE IF NOT EXISTS module_catalog(
+ id BIGSERIAL PRIMARY KEY,
+ module_key TEXT NOT NULL UNIQUE,
+ name TEXT NOT NULL,
+ description TEXT,
+ created_at TIMESTAMPTZ DEFAULT now()
+);
+
 INSERT INTO module_catalog(module_key,name,description)
 VALUES
 ('evolution','Evolution WhatsApp','Conexão WhatsApp via Evolution API'),
