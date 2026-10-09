@@ -52,16 +52,19 @@ if(!companyId) return {};
 const r = await pool.query(`
 SELECT
  c.name AS company_name,
+ b.brand_name,
  b.logo_url,
  b.primary_color,
- b.secondary_color
+ b.secondary_color,
+ b.theme,
+ b.favicon_url
 FROM companies c
 LEFT JOIN company_branding b
 ON b.company_id=c.id
 WHERE c.id=$1
 `,
 [companyId]);
-console.log("BRANDING:", r.rows[0]);
+
 return r.rows[0] || {};
 
 }
