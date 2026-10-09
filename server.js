@@ -615,6 +615,8 @@ const brand=await pool.query(
 
 const b=brand.rows[0]||{};
 
+const pageBrand = await getCompanyBranding(req.params.id);
+
 
 res.send(page('Identidade Visual',`
 
@@ -671,7 +673,7 @@ Salvar identidade
 </section>
 
 
-`));
+`,pageBrand));
 
 });
 app.post('/companies/:id/branding',admin,csrf,async(req,res)=>{
