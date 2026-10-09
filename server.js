@@ -485,9 +485,190 @@ app.get('/companies/:id/edit',admin,async(req,res)=>{
  if(!r.rowCount)return res.status(404).send('Empresa não encontrada');
  const c=r.rows[0];res.send(page('Editar empresa',`<h1>Editar empresa</h1><section><form method="POST"><label>Nome</label><input name="name" required maxlength="120" value="${esc(c.name)}"><button>Salvar empresa</button></form></section>`));
 });
+app.get('/companies/:id/branding',admin,async(req,res)=>{
+
+const company=await pool.query(
+'SELECT * FROM companies WHERE id=$1',
+[req.params.id]
+);
+
+if(!company.rowCount)
+ return res.status(404).send('Empresa não encontrada');
+
+
+const brand=await pool.query(
+'SELECT * FROM company_branding WHERE company_id=$1',
+[req.params.id]
+);
+
+
+const b=brand.rows[0]||{};
+
+
+res.send(page('Identidade Visual',`
+
+<section>
+
+<h1>🎨 Identidade Visual</h1>
+
+<p class="muted">
+Personalize a experiência desta empresa no EFFE Sync.
+</p>
+
+
+<form method="POST">
+
+
+<label>
+Logo URL
+</label>
+
+<input
+name="logo_url"
+value="${esc(b.logo_url||'')}"
+placeholder="https://..."
+>
+
+
+<label>
+Cor principal
+</label>
+
+<input
+name="primary_color"
+value="${esc(b.primary_color||'#2167e8')}"
+>
+
+
+<label>
+Cor do menu
+</label>
+
+<input
+name="secondary_color"
+value="${esc(b.secondary_color||'#101c35')}"
+>
+
+
+<button>
+Salvar identidade
+</button>
+
+
+</form>
+
+</section>
+
+
+`));
+
+});
 app.post('/companies/:id/edit',admin,csrf,async(req,res)=>{
  try{const name=String(req.body.name||'').trim();if(!name||name.length>120)throw Error('Nome inválido');const r=await pool.query('UPDATE companies SET name=$1 WHERE id=$2 RETURNING id',[name,req.params.id]);if(!r.rowCount)throw Error('Empresa não encontrada');res.redirect('/companies')}
  catch(e){fail(res,e)}
+});
+app.get('/companies/:id/branding',admin,async(req,res)=>{
+
+const company=await pool.query(
+'SELECT * FROM companies WHERE id=$1',
+[req.params.id]
+);
+
+if(!company.rowCount)
+ return res.status(404).send('Empresa não encontrada');
+
+
+const brand=await pool.query(
+'SELECT * FROM company_branding WHERE company_id=$1',
+[req.params.id]
+);
+
+
+const b=brand.rows[0]||{};
+
+
+res.send(page('Identidade Visual',`
+
+<section>
+
+<h1>🎨 Identidade Visual</h1>
+
+<p class="muted">
+Personalize a experiência desta empresa no EFFE Sync.
+</p>
+
+
+<form method="POST">
+
+
+<label>
+Logo URL
+</label>
+
+<input
+name="logo_url"
+value="${esc(b.logo_url||'')}"
+placeholder="https://..."
+>
+
+
+<label>
+Cor principal
+</label>
+
+<input
+name="primary_color"
+value="${esc(b.primary_color||'#2167e8')}"
+>
+
+
+<label>
+Cor do menu
+</label>
+
+<input
+name="secondary_color"
+value="${esc(b.secondary_color||'#101c35')}"
+>
+
+
+<button>
+Salvar identidade
+</button>
+
+
+</form>
+
+</section>
+
+
+`));
+
+});
+app.post('/companies/:id/branding',admin,csrf,async(req,res)=>{
+
+await pool.query(`
+INSERT INTO company_branding
+(company_id,logo_url,primary_color,secondary_color)
+VALUES($1,$2,$3,$4)
+
+ON CONFLICT(company_id)
+DO UPDATE SET
+logo_url=$2,
+primary_color=$3,
+secondary_color=$4,
+updated_at=now()
+`,
+[
+req.params.id,
+req.body.logo_url||null,
+req.body.primary_color||'#2167e8',
+req.body.secondary_color||'#101c35'
+]);
+
+
+res.redirect(`/companies/${req.params.id}/branding`);
+
 });
 app.post('/companies',admin,csrf,async(req,res)=>{try{if(!String(req.body.name||'').trim())throw Error('Nome obrigatório');await pool.query('INSERT INTO companies(name) VALUES($1)',[String(req.body.name).trim()]);res.redirect('/companies')}catch(e){fail(res,e)}});
 app.get('/integrations',admin,async(req,res)=>{const [c,i]=await Promise.all([pool.query('SELECT * FROM companies ORDER BY name'),pool.query('SELECT i.*,c.name company FROM integrations i JOIN companies c ON c.id=i.company_id ORDER BY i.id DESC')]);res.send(page('Instâncias',`<h1>Instâncias e roteamento</h1><section><p class="warning">Cada par Conta + Caixa de entrada só pode pertencer a uma instância. Use o segredo de assinatura do webhook real do Chatwoot. Ele não será exibido novamente neste painel.</p><form method="POST"><label>Empresa</label><select name="company_id" required>${c.rows.map(x=>`<option value="${x.id}">${esc(x.name)}</option>`)}</select><label>Nome interno</label><input name="label" required placeholder="Comercial - Empresa A"><label>Nome exato da instância Evolution</label><input name="instance" required><label>ID da conta no Chatwoot</label><input name="account_id" type="number" min="1" required><label>ID da caixa de entrada no Chatwoot</label><input name="inbox_id" type="number" min="1" required><label>Segredo da assinatura do webhook no Chatwoot</label><input name="webhook_secret" required minlength="8" placeholder="Copie o segredo real do webhook Chatwoot"><button>Adicionar instância</button></form></section><section><h2>Integrações</h2><table><tr><th>Empresa / Instância</th><th>Conta / Inbox</th><th>Webhook</th><th>Ação</th></tr>${i.rows.map(x=>`<tr><td>${esc(x.company)}<br><b>${esc(x.label)}</b><br><small>${esc(x.instance)}</small></td><td>${x.account_id} / ${x.inbox_id}</td><td><code>${esc(url+'/webhook/'+x.webhook_path)}</code><br><small>${x.enabled?'Ativa':'Desativada'}</small></td><td><a href="/integrations/${x.id}/edit">Editar</a>　<a href="/automations/${x.id}">Automações</a>　<form method="POST" action="/integrations/${x.id}/toggle" class="inline"><button>${x.enabled?'Desativar':'Ativar'}</button></form></td></tr>`).join('')}</table></section>`))});
