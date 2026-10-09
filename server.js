@@ -45,6 +45,26 @@ WHERE company_id=$1
 return r.rows[0]||{};
 
 }
+async function getCompanyBranding(companyId){
+
+if(!companyId) return {};
+
+const r = await pool.query(`
+SELECT
+ c.name AS company_name,
+ b.logo_url,
+ b.primary_color,
+ b.secondary_color
+FROM companies c
+LEFT JOIN company_branding b
+ON b.company_id=c.id
+WHERE c.id=$1
+`,
+[companyId]);
+
+return r.rows[0] || {};
+
+}
 function page(title,inner,brand={}){
 
 const brandName=brand.company_name||'EFFE Sync';
@@ -511,7 +531,8 @@ ${esc(x.created_at.toISOString())}
 app.get('/companies/:id/edit',admin,async(req,res)=>{
  const r=await pool.query('SELECT id,name FROM companies WHERE id=$1',[req.params.id]);
  if(!r.rowCount)return res.status(404).send('Empresa não encontrada');
- const c=r.rows[0];res.send(page('Editar empresa',`<h1>Editar empresa</h1><section><form method="POST"><label>Nome</label><input name="name" required maxlength="120" value="${esc(c.name)}"><button>Salvar empresa</button></form></section>`));
+ const c=r.rows[0];const brand = await getCompanyBranding(req.params.id);
+  res.send(page('Editar empresa',`<h1>Editar empresa</h1><section><form method="POST"><label>Nome</label><input name="name" required maxlength="120" value="${esc(c.name)}"><button>Salvar empresa</button></form></section>`,brand));
 });
 app.post('/companies/:id/edit',admin,csrf,async(req,res)=>{
  try{const name=String(req.body.name||'').trim();if(!name||name.length>120)throw Error('Nome inválido');const r=await pool.query('UPDATE companies SET name=$1 WHERE id=$2 RETURNING id',[name,req.params.id]);if(!r.rowCount)throw Error('Empresa não encontrada');res.redirect('/companies')}
