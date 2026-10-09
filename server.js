@@ -384,6 +384,20 @@ CREATE TABLE IF NOT EXISTS tenants(
  created_at TIMESTAMPTZ DEFAULT now()
 );
 
+CREATE TABLE IF NOT EXISTS tenant_branding(
+ id BIGSERIAL PRIMARY KEY,
+ tenant_id BIGINT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+ brand_name TEXT,
+ logo_url TEXT,
+ primary_color TEXT NOT NULL DEFAULT '#215fca',
+ secondary_color TEXT NOT NULL DEFAULT '#13233e',
+ theme TEXT NOT NULL DEFAULT 'light',
+ favicon_url TEXT,
+ created_at TIMESTAMPTZ DEFAULT now(),
+ updated_at TIMESTAMPTZ DEFAULT now(),
+ UNIQUE(tenant_id)
+);
+
 ALTER TABLE companies
 ADD COLUMN IF NOT EXISTS tenant_id BIGINT
 REFERENCES tenants(id);
