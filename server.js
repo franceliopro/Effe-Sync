@@ -387,6 +387,27 @@ CREATE TABLE IF NOT EXISTS tenants(
 ALTER TABLE companies
 ADD COLUMN IF NOT EXISTS tenant_id BIGINT
 REFERENCES tenants(id);
+
+CREATE TABLE IF NOT EXISTS modules(
+ id BIGSERIAL PRIMARY KEY,
+ tenant_id BIGINT NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+ module_key TEXT NOT NULL,
+ enabled BOOLEAN NOT NULL DEFAULT false,
+ settings JSONB DEFAULT '{}'::jsonb,
+ created_at TIMESTAMPTZ DEFAULT now(),
+ updated_at TIMESTAMPTZ DEFAULT now(),
+ UNIQUE(tenant_id,module_key)
+);
+INSERT INTO module_catalog(module_key,name,description)
+VALUES
+('evolution','Evolution WhatsApp','Conexão WhatsApp via Evolution API'),
+('chatwoot','Chatwoot','Atendimento humano e filas'),
+('typebot','Typebot','Fluxos conversacionais'),
+('ai','EFFE AI','Agentes inteligentes, RAG e memória'),
+('crm','CRM','Pipeline comercial e follow-up'),
+('finance','Financeiro','Pagamentos e cobranças'),
+('marketing_ai','Marketing AI','Conteúdo e automação de redes sociais')
+ON CONFLICT(module_key) DO NOTHING;
 `)}
 app.get('/health',async(req,res)=>{try{await pool.query('SELECT 1');res.json({ok:true})}catch{res.status(503).json({ok:false})}});
 let attempts=new Map();
