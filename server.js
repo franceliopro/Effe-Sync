@@ -69,6 +69,42 @@ return r.rows[0] || {};
 
 }
 
+return r.rows[0] || {};
+
+}
+
+
+async function getCompanyContext(companyId){
+
+const r = await pool.query(`
+SELECT
+ c.id AS company_id,
+ c.name AS company_name,
+ c.tenant_id,
+ t.name AS tenant_name
+FROM companies c
+LEFT JOIN tenants t
+ON t.id=c.tenant_id
+WHERE c.id=$1
+`,
+[companyId]);
+
+if(!r.rowCount)
+ return {};
+
+const company=r.rows[0];
+
+const brand=await getTenantBranding(company.tenant_id);
+
+return {
+ ...company,
+ ...brand
+};
+
+}
+
+
+const fail=(res,e)=>res.status(400)
 
 function page(title,inner,brand={}){
   async function companyPage(req,title,inner){
