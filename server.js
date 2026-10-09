@@ -61,7 +61,7 @@ ON b.company_id=c.id
 WHERE c.id=$1
 `,
 [companyId]);
-
+console.log("BRANDING:", r.rows[0]);
 return r.rows[0] || {};
 
 }
