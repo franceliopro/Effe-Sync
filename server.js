@@ -404,6 +404,43 @@ ${inner}
 </body>
 </html>`;
 }
+
+async function getTenantBranding(tenantId){
+
+if(!tenantId) return {};
+
+const r = await pool.query(`
+SELECT
+ t.name AS tenant_name,
+ b.brand_name,
+ b.logo_url,
+ b.primary_color,
+ b.secondary_color,
+ b.theme,
+ b.favicon_url
+FROM tenants t
+LEFT JOIN tenant_branding b
+ON b.tenant_id=t.id
+WHERE t.id=$1
+`,
+[tenantId]);
+
+return r.rows[0] || {};
+
+}
+
+async function getTenantFromCompany(companyId){
+
+const r = await pool.query(`
+SELECT tenant_id
+FROM companies
+WHERE id=$1
+`,
+[companyId]);
+
+return r.rows[0]?.tenant_id || null;
+
+}
 const fail=(res,e)=>res.status(400).send(page('Erro',`<section><h2>Não foi possível concluir</h2><p>${esc(e.message||e)}</p><a href="/">Voltar</a></section>`));
 async function init(){await pool.query(`CREATE TABLE IF NOT EXISTS companies(id BIGSERIAL PRIMARY KEY,name TEXT NOT NULL UNIQUE,created_at TIMESTAMPTZ DEFAULT now());CREATE TABLE IF NOT EXISTS integrations(id BIGSERIAL PRIMARY KEY,company_id BIGINT NOT NULL REFERENCES companies(id),label TEXT NOT NULL,instance TEXT NOT NULL,account_id INTEGER NOT NULL CHECK(account_id>0),inbox_id INTEGER NOT NULL CHECK(inbox_id>0),webhook_path TEXT NOT NULL UNIQUE,webhook_secret TEXT NOT NULL,enabled BOOLEAN NOT NULL DEFAULT true,created_at TIMESTAMPTZ DEFAULT now(),UNIQUE(account_id,inbox_id));CREATE TABLE IF NOT EXISTS events(id BIGSERIAL PRIMARY KEY,integration_id BIGINT NOT NULL REFERENCES integrations(id),delivery_key TEXT NOT NULL,conversation_id TEXT,status TEXT NOT NULL DEFAULT 'pending',reason TEXT,payload JSONB,remote_jid TEXT,attempts INT NOT NULL DEFAULT 0,created_at TIMESTAMPTZ DEFAULT now(),processed_at TIMESTAMPTZ,UNIQUE(integration_id,delivery_key));CREATE INDEX IF NOT EXISTS events_pending_idx ON events(status,created_at);ALTER TABLE integrations ADD COLUMN IF NOT EXISTS clear_assignment_on_resolve BOOLEAN NOT NULL DEFAULT false;ALTER TABLE integrations ADD COLUMN IF NOT EXISTS bot_resolve_status TEXT NOT NULL DEFAULT 'opened';ALTER TABLE integrations ADD COLUMN IF NOT EXISTS evolution_instance_id TEXT;CREATE TABLE IF NOT EXISTS automation_rules(id BIGSERIAL PRIMARY KEY,integration_id BIGINT NOT NULL REFERENCES integrations(id) ON DELETE CASCADE,event TEXT NOT NULL CHECK(event='conversation.resolved'),action TEXT NOT NULL CHECK(action IN ('chatwoot.clear_assignment','typebot.delete_session','typebot.open_session','typebot.close_session','audit.only')),enabled BOOLEAN NOT NULL DEFAULT true,created_at TIMESTAMPTZ NOT NULL DEFAULT now(),UNIQUE(integration_id,event,action));CREATE TABLE IF NOT EXISTS company_branding(
 id BIGSERIAL PRIMARY KEY,
