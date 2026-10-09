@@ -69,18 +69,6 @@ return r.rows[0] || {};
 
 }
 
-async function getTenantBranding(tenantId){
-
-const r = await pool.query(`
-SELECT tenant_id
-FROM companies
-WHERE id=$1
-`,
-[companyId]);
-
-return r.rows[0]?.tenant_id || null;
-
-}
 
 function page(title,inner,brand={}){
   async function companyPage(req,title,inner){
