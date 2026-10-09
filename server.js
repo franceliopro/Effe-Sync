@@ -529,10 +529,28 @@ ${esc(x.created_at.toISOString())}
 });app.get('/companies',admin,async(req,res)=>{const r=await pool.query('SELECT * FROM companies ORDER BY id DESC');res.send(page('Empresas',`<h1>Empresas</h1><section><form method="POST"><label>Nome da empresa</label><input name="name" maxlength="120" required><button>Cadastrar empresa</button></form></section><section><table><tr><th>ID</th><th>Nome</th></tr>${r.rows.map(x=>`<tr><td>${x.id}</td><td>${esc(x.name)} <a href="/companies/${x.id}/edit">Editar</a>
 <a href="/companies/${x.id}/branding">🎨 Identidade Visual</a></td></tr>`).join('')}</table></section>`))});
 app.get('/companies/:id/edit',admin,async(req,res)=>{
- const r=await pool.query('SELECT id,name FROM companies WHERE id=$1',[req.params.id]);
- if(!r.rowCount)return res.status(404).send('Empresa não encontrada');
- const c=r.rows[0];const brand = await getCompanyBranding(req.params.id);
-  res.send(page('Editar empresa',`<h1>Editar empresa</h1><section><form method="POST"><label>Nome</label><input name="name" required maxlength="120" value="${esc(c.name)}"><button>Salvar empresa</button></form></section>`,brand));
+
+const r=await pool.query(
+'SELECT * FROM companies WHERE id=$1',
+[req.params.id]
+);
+
+const c=r.rows[0];
+
+const brand = await getCompanyBranding(req.params.id);
+
+console.log("BRANDING EDIT:", brand);
+
+res.send(page('Editar empresa',`
+
+<section>
+<h1>Editar empresa</h1>
+
+...
+</section>
+
+`,brand));
+
 });
 app.post('/companies/:id/edit',admin,csrf,async(req,res)=>{
  try{const name=String(req.body.name||'').trim();if(!name||name.length>120)throw Error('Nome inválido');const r=await pool.query('UPDATE companies SET name=$1 WHERE id=$2 RETURNING id',[name,req.params.id]);if(!r.rowCount)throw Error('Empresa não encontrada');res.redirect('/companies')}
