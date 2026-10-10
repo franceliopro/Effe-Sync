@@ -6,6 +6,14 @@ import pg from 'pg';
 import pool from './database/connection.js';
 
 import {
+    current,
+    admin,
+    cookie,
+    createToken,
+    signToken
+} from './core/auth/session.js';
+
+import {
     getCompanyContext,
     getTenantBranding
 } from './services/company-context.service.js';
@@ -24,11 +32,7 @@ app.use(express.urlencoded({extended:false,limit:'12kb'}));app.use(express.json(
 const url=process.env.PUBLIC_URL.replace(/\/$/,'');
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const token=()=>crypto.randomBytes(24).toString('hex');
-const sign=v=>crypto.createHmac('sha256',process.env.SESSION_SECRET).update(v).digest('hex');
 const secure=process.env.NODE_ENV==='production'?'; Secure':'';
-const cookie=(res,name,value,maxAge)=>res.setHeader('Set-Cookie',`${name}=${value}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${maxAge}${secure}`);
-function current(req){const raw=String(req.headers.cookie||'').split('; ').find(x=>x.startsWith('bc_session='))?.slice(11);if(!raw)return false;const [exp,sig]=raw.split('.');if(!/^\d+$/.test(exp)||Number(exp)<Date.now())return false;const h=sign(exp);return sig?.length===h.length&&crypto.timingSafeEqual(Buffer.from(sig),Buffer.from(h));}
-function admin(req,res,next){if(!current(req))return res.redirect('/login');next()}
 function csrf(req,res,next){
 
   // CSRF defense without accepting Origin: null.
