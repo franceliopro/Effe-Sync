@@ -2,6 +2,7 @@ import express from 'express';
 import helmet from 'helmet';
 import bcrypt from 'bcryptjs';
 import crypto from 'node:crypto';
+import pg from 'pg';
 import pool from './database/connection.js';
 import { matchPausedSession, accountInbox, identifiers } from './matching.js';
 import { chooseSessionForDeletion } from './session-policy.js';
