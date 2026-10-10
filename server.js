@@ -4,6 +4,11 @@ import bcrypt from 'bcryptjs';
 import crypto from 'node:crypto';
 import pg from 'pg';
 import pool from './database/connection.js';
+import {
+    getCompanyContext,
+    getTenantBranding
+} from './services/company-context.service.js';
+
 import { matchPausedSession, accountInbox, identifiers } from './matching.js';
 import { chooseSessionForDeletion } from './session-policy.js';
 
@@ -45,35 +50,6 @@ WHERE company_id=$1
 [companyId]);
 
 return r.rows[0]||{};
-
-}
-
-async function getCompanyContext(companyId){
-
-const r = await pool.query(`
-SELECT
- c.id AS company_id,
- c.name AS company_name,
- c.tenant_id,
- t.name AS tenant_name
-FROM companies c
-LEFT JOIN tenants t
-ON t.id=c.tenant_id
-WHERE c.id=$1
-`,
-[companyId]);
-
-if(!r.rowCount)
- return {};
-
-const company = r.rows[0];
-
-const brand = await getTenantBranding(company.tenant_id);
-
-return {
- ...company,
- ...brand
-};
 
 }
 
