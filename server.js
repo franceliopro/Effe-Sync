@@ -464,7 +464,7 @@ cookie(
     28800
 );
 
-res.redirec('/')});
+res.redirect('/')});
 app.get('/logout',(req,res)=>{cookie(res,'bc_session','',0);res.redirect('/login')});
 app.get('/',admin,async(req,res)=>{
 
