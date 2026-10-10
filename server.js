@@ -1,15 +1,15 @@
 import express from 'express';
 import helmet from 'helmet';
-import pg from 'pg';
 import bcrypt from 'bcryptjs';
 import crypto from 'node:crypto';
+import pool from './database/connection.js';
 import { matchPausedSession, accountInbox, identifiers } from './matching.js';
 import { chooseSessionForDeletion } from './session-policy.js';
 
 const required=['DATABASE_URL','SESSION_SECRET','ADMIN_EMAIL','ADMIN_PASSWORD','EVOLUTION_URL','EVOLUTION_API_KEY','PUBLIC_URL'];
 for(const k of required)if(!process.env[k])throw Error(`Missing ${k}`);
 if(process.env.SESSION_SECRET.length<32)throw Error('SESSION_SECRET must be at least 32 characters');
-const pool=new pg.Pool({connectionString:process.env.DATABASE_URL,ssl:process.env.DATABASE_SSL==='true'?{rejectUnauthorized:true}:false});
+
 // Conexão independente e restrita ao banco da Evolution, ativada somente no modo delete_session.
 const evolutionDb=process.env.EVOLUTION_DATABASE_URL ? new pg.Pool({connectionString:process.env.EVOLUTION_DATABASE_URL,ssl:process.env.EVOLUTION_DATABASE_SSL==='true'?{rejectUnauthorized:true}:false,max:3}) : null;
 const app=express(); app.disable('x-powered-by'); app.set('trust proxy',1);app.use(helmet({contentSecurityPolicy:false,referrerPolicy:{policy:'strict-origin-when-cross-origin'}}));
@@ -23,6 +23,7 @@ const cookie=(res,name,value,maxAge)=>res.setHeader('Set-Cookie',`${name}=${valu
 function current(req){const raw=String(req.headers.cookie||'').split('; ').find(x=>x.startsWith('bc_session='))?.slice(11);if(!raw)return false;const [exp,sig]=raw.split('.');if(!/^\d+$/.test(exp)||Number(exp)<Date.now())return false;const h=sign(exp);return sig?.length===h.length&&crypto.timingSafeEqual(Buffer.from(sig),Buffer.from(h));}
 function admin(req,res,next){if(!current(req))return res.redirect('/login');next()}
 function csrf(req,res,next){
+
   // CSRF defense without accepting Origin: null.
   const expected=new URL(process.env.PUBLIC_URL.trim()).origin;
   const raw=req.get('origin');
