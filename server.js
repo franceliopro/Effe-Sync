@@ -382,6 +382,7 @@ ${esc(brandName)}
 
 <a href="/">🏠 Painel</a>
 <a href="/companies">🏢 Empresas</a>
+<a href="/modules">🧩 Módulos</a>
 <a href="/integrations">🔌 Instâncias</a>
 <a href="/automations">🤖 Automações</a>
 <a href="/events">📊 Eventos</a>
@@ -649,6 +650,109 @@ ${esc(x.created_at.toISOString())}
 
 
 `));
+
+});app.get('/modules',admin,async(req,res)=>{
+
+    const tenant = await pool.query(`
+        SELECT id,name
+        FROM tenants
+        ORDER BY id
+        LIMIT 1
+    `);
+
+
+    if(!tenant.rowCount){
+        return res.send(
+            page(
+                'Módulos',
+                '<section><h1>Nenhum tenant encontrado</h1></section>'
+            )
+        );
+    }
+
+
+    const modules = await pool.query(`
+        SELECT
+            mc.module_key,
+            mc.name,
+            mc.description,
+            COALESCE(m.enabled,false) enabled
+
+        FROM module_catalog mc
+
+        LEFT JOIN modules m
+        ON m.module_key=mc.module_key
+        AND m.tenant_id=$1
+
+        ORDER BY mc.name
+    `,
+    [
+        tenant.rows[0].id
+    ]);
+
+
+    res.send(page(
+        'Módulos',
+        `
+        <section>
+
+        <h1>🧩 Módulos EFFE Core</h1>
+
+        <p>
+        Tenant:
+        <b>${esc(tenant.rows[0].name)}</b>
+        </p>
+
+        </section>
+
+
+        <section>
+
+        <table>
+
+        <tr>
+        <th>Módulo</th>
+        <th>Descrição</th>
+        <th>Status</th>
+        </tr>
+
+
+        ${
+        modules.rows.map(m=>`
+
+        <tr>
+
+        <td>
+        <b>${esc(m.name)}</b>
+        <br>
+        <small>${esc(m.module_key)}</small>
+        </td>
+
+
+        <td>
+        ${esc(m.description||'')}
+        </td>
+
+
+        <td>
+        ${
+        m.enabled
+        ? '🟢 Ativo'
+        : '⚪ Inativo'
+        }
+        </td>
+
+        </tr>
+
+        `).join('')
+        }
+
+
+        </table>
+
+        </section>
+        `
+    ));
 
 });app.get('/companies',admin,async(req,res)=>{const r=await pool.query('SELECT * FROM companies ORDER BY id DESC');res.send(page('Empresas',`<h1>Empresas</h1><section><form method="POST"><label>Nome da empresa</label><input name="name" maxlength="120" required><button>Cadastrar empresa</button></form></section><section><table><tr><th>ID</th><th>Nome</th></tr>${r.rows.map(x=>`<tr><td>${x.id}</td><td>${esc(x.name)} <a href="/companies/${x.id}/edit">Editar</a>
 <a href="/companies/${x.id}/branding">🎨 Identidade Visual</a></td></tr>`).join('')}</table></section>`))});
